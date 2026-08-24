@@ -1,0 +1,61 @@
+{
+  "package_version": 2,
+  "name": "build-asset-resolver",
+  "version": "1.0.0",
+  "title": "构建资源定位器",
+  "description": "将 Cocos 构建产物文件定位回源资源。",
+  "author": "Gala Client",
+  "editor": ">=3.8.0",
+  "main": "./main.js",
+  "panels": {
+    "default": {
+      "title": "构建资源定位器",
+      "main": "./panel/index.js",
+      "type": "simple",
+      "size": {
+        "width": 620,
+        "height": 440,
+        "min-width": 460,
+        "min-height": 300
+      }
+    },
+    "help": {
+      "title": "构建资源定位器使用帮助",
+      "main": "./panel/help.js",
+      "type": "simple",
+      "size": { "width": 560, "height": 520, "min-width": 380, "min-height": 300 }
+    }
+  },
+  "contributions": {
+    "menu": [
+      {
+        "path": "i18n:menu.extension/构建资源定位器",
+        "label": "打开资源定位器",
+        "message": "open-panel"
+      },
+      {
+        "path": "i18n:menu.extension/构建资源定位器",
+        "label": "打开使用帮助",
+        "message": "open-help"
+      }
+    ],
+    "messages": {
+      "open-panel": {
+        "methods": ["openPanel"]
+      },
+      "open-help": { "methods": ["openHelp"] },
+      "resolve-build-asset": {
+        "methods": ["resolveBuildAsset"]
+      },
+      "open-source-asset": {
+        "methods": ["openSourceAsset"]
+      },
+      "get-last-result": {
+        "methods": ["getLastResult"]
+      },
+      "result-updated": {
+        "methods": ["default.updateResult"]
+      }
+    }
+  }
+}

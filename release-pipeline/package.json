@@ -1,0 +1,51 @@
+{
+  "package_version": 2,
+  "name": "release-pipeline",
+  "version": "0.1.0",
+  "title": "发布流水线",
+  "description": "用于混淆、指纹和打包的构建后处理流水线。",
+  "author": "Codex",
+  "editor": ">=3.8.0",
+  "main": "./main.js",
+  "panels": {
+    "default": {
+      "title": "发布流水线使用帮助",
+      "main": "./panel/help.js",
+      "type": "simple",
+      "size": { "width": 620, "height": 560, "min-width": 420, "min-height": 320 }
+    }
+  },
+  "contributions": {
+    "builder": "./builder",
+    "menu": [
+      {
+        "path": "i18n:menu.extension/发布流水线",
+        "label": "打开配置",
+        "message": "open-config"
+      },
+      {
+        "path": "i18n:menu.extension/发布流水线",
+        "label": "打开最新报告",
+        "message": "open-latest-report"
+      },
+      {
+        "path": "i18n:menu.extension/发布流水线",
+        "label": "打开使用帮助",
+        "message": "open-help"
+      }
+    ],
+    "messages": {
+      "open-config": {
+        "methods": [
+          "openConfig"
+        ]
+      },
+      "open-latest-report": {
+        "methods": [
+          "openLatestReport"
+        ]
+      },
+      "open-help": { "methods": ["openHelp"] }
+    }
+  }
+}

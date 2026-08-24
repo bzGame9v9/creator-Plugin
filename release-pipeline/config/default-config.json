@@ -1,0 +1,168 @@
+{
+  "enabled": true,
+  "platforms": [
+    "web-mobile"
+  ],
+  "tasks": [
+    {
+      "name": "cleanBackup",
+      "enabled": true
+    },
+    {
+      "name": "obfuscateJs",
+      "enabled": true
+    },
+    {
+      "name": "fingerprintBuild",
+      "enabled": true
+    },
+    {
+      "name": "zipBuild",
+      "enabled": true
+    },
+    {
+      "name": "writeReport",
+      "enabled": true
+    }
+  ],
+  "backup": {
+    "enabled": true,
+    "root": "project://build/.release-pipeline-backups",
+    "cleanBeforeRun": true
+  },
+  "reports": {
+    "enabled": true,
+    "root": "project://build/.release-pipeline-reports"
+  },
+  "obfuscation": {
+    "enabled": true,
+    "marker": "release-pipeline-obfuscated",
+    "exclude": [
+      ".release-pipeline/**",
+      "cocos-js/**",
+      "src/**",
+      "application.*.js",
+      "index.*.js"
+    ],
+    "options": {
+      "compact": true,
+      "simplify": true,
+      "stringArray": true,
+      "stringArrayThreshold": 0.5,
+      "identifierNamesGenerator": "hexadecimal",
+      "sourceMap": false,
+      "disableConsoleOutput": false,
+      "seed": 20260611
+    },
+    "groups": [
+      {
+        "name": "game-main",
+        "enabled": true,
+        "include": [
+          "assets/main/index.*.js"
+        ]
+      },
+      {
+        "name": "cocos-resources",
+        "enabled": true,
+        "include": [
+          "assets/resources/index.*.js"
+        ],
+        "options": {
+          "stringArrayThreshold": 0.25,
+          "renameGlobals": false,
+          "transformObjectKeys": false,
+          "controlFlowFlattening": false,
+          "deadCodeInjection": false,
+          "debugProtection": false,
+          "selfDefending": false,
+          "ignoreImports": true
+        }
+      },
+      {
+        "name": "web-root-sdk",
+        "enabled": true,
+        "include": [
+          "InitializeFirebase*.js",
+          "firebase-messaging-sw*.js",
+          "closeWeb*.js",
+          "btnCustorm*.js",
+          "btnShop*.js",
+          "openCamera*.js",
+          "simpleVerify*.js",
+          "fanhui*.js",
+          "thirdPartyEvents*.js",
+          "SportsGame*.js",
+          "pwa-prompt*.js"
+        ],
+        "options": {
+          "stringArrayThreshold": 0.25,
+          "renameGlobals": false,
+          "transformObjectKeys": false,
+          "controlFlowFlattening": false,
+          "deadCodeInjection": false,
+          "debugProtection": false,
+          "selfDefending": false,
+          "ignoreImports": true,
+          "reservedNames": [
+            "^requestPermission$",
+            "^firebaseAnalyticsDebugMode$",
+            "^firebaseSetUserId$",
+            "^logEvent$",
+            "^analytics$",
+            "^messaging$",
+            "^getAuth$",
+            "^signInWithPopup$",
+            "^GoogleAuthProvider$",
+            "^fbAsyncInit$",
+            "^handleOuthResponse$",
+            "^logBeforeClose$",
+            "^thirdSdkEvent$",
+            "^adjustInit$",
+            "^onResizeHandler$",
+            "^MTpushInterfaceReady$",
+            "^showMoreGameBackButton$",
+            "^hideMoreGameBackButton$",
+            "^customFuc$",
+            "^pushData$"
+          ],
+          "reservedStrings": [
+            "^requestPermission$",
+            "^firebaseAnalyticsDebugMode$",
+            "^firebaseSetUserId$",
+            "^logEvent$",
+            "^analytics$",
+            "^messaging$",
+            "^getAuth$",
+            "^signInWithPopup$",
+            "^GoogleAuthProvider$",
+            "^fbAsyncInit$",
+            "^onGoogleLoginSuccess$",
+            "^onGoogleLoginError$",
+            "^_isPortrait$",
+            "^MTpushInterfaceReady$",
+            "^showMoreGameBackButton$",
+            "^hideMoreGameBackButton$",
+            "^customFuc$",
+            "^pushData$"
+          ]
+        }
+      }
+    ]
+  },
+  "fingerprint": {
+    "enabled": true,
+    "algorithm": "md5",
+    "length": 5,
+    "exclude": [
+      ".release-pipeline/**",
+      "cocos-js/**",
+      "assets/**/import/**",
+      "assets/**/native/**"
+    ]
+  },
+  "zip": {
+    "enabled": true,
+    "output": "project://build/{outputName}.zip"
+  }
+}

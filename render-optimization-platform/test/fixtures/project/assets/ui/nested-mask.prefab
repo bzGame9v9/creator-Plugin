@@ -1,0 +1,68 @@
+[
+  {
+    "__type__": "cc.Prefab",
+    "_name": "nested-mask",
+    "data": { "__id__": 1 }
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "Root",
+    "_parent": null,
+    "_children": [{ "__id__": 2 }],
+    "_components": [],
+    "_active": true
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "OuterMask",
+    "_parent": { "__id__": 1 },
+    "_children": [{ "__id__": 3 }],
+    "_components": [{ "__id__": 4 }],
+    "_active": true
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "InnerMask",
+    "_parent": { "__id__": 2 },
+    "_children": [],
+    "_components": [
+      { "__id__": 5 }, { "__id__": 6 }, { "__id__": 7 }, { "__id__": 8 },
+      { "__id__": 9 }, { "__id__": 10 }, { "__id__": 11 }, { "__id__": 12 },
+      { "__id__": 13 }, { "__id__": 14 }
+    ],
+    "_active": true
+  },
+  {
+    "__type__": "cc.Mask",
+    "node": { "__id__": 2 },
+    "_enabled": true,
+    "_spriteFrame": { "__uuid__": "11111111-1111-4111-8111-111111111111@f9941" },
+    "_srcBlendFactor": 2,
+    "_dstBlendFactor": 4
+  },
+  {
+    "__type__": "cc.Mask",
+    "node": { "__id__": 3 },
+    "_enabled": true,
+    "_spriteFrame": { "__uuid__": "22222222-2222-4222-8222-222222222222@f9941" },
+    "_srcBlendFactor": 2,
+    "_dstBlendFactor": 4
+  },
+  {
+    "__type__": "cc.Sprite",
+    "node": { "__id__": 3 },
+    "_enabled": true,
+    "_spriteFrame": { "__uuid__": "11111111-1111-4111-8111-111111111111@f9941" },
+    "_customMaterial": { "__uuid__": "33333333-3333-4333-8333-333333333333" },
+    "_srcBlendFactor": 2,
+    "_dstBlendFactor": 4
+  },
+  { "__type__": "cc.Label", "node": { "__id__": 3 }, "_enabled": true, "_string": "A", "_cacheMode": 0 },
+  { "__type__": "cc.Label", "node": { "__id__": 3 }, "_enabled": true, "_string": "B", "_cacheMode": 0 },
+  { "__type__": "cc.Label", "node": { "__id__": 3 }, "_enabled": true, "_string": "C", "_cacheMode": 0 },
+  { "__type__": "cc.Label", "node": { "__id__": 3 }, "_enabled": true, "_string": "D", "_cacheMode": 0 },
+  { "__type__": "cc.Label", "node": { "__id__": 3 }, "_enabled": true, "_string": "E", "_cacheMode": 0 },
+  { "__type__": "cc.Label", "node": { "__id__": 3 }, "_enabled": true, "_string": "F", "_cacheMode": 0 },
+  { "__type__": "cc.Label", "node": { "__id__": 3 }, "_enabled": true, "_string": "G", "_cacheMode": 0 },
+  { "__type__": "cc.Label", "node": { "__id__": 3 }, "_enabled": true, "_string": "H", "_cacheMode": 0 }
+]

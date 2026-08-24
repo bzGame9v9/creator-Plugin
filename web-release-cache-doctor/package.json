@@ -1,0 +1,58 @@
+{
+  "package_version": 2,
+  "name": "web-release-cache-doctor",
+  "version": "1.0.0",
+  "title": "Web 发布诊断中心",
+  "description": "检查 Web 发布 ZIP、源站、CDN、Service Worker 和 CacheStorage 的版本一致性。",
+  "author": "Gala Client",
+  "editor": ">=3.8.6 <3.9.0",
+  "main": "./main.js",
+  "panels": {
+    "default": {
+      "title": "Web 发布诊断中心",
+      "main": "./panel/index.js",
+      "type": "dockable",
+      "size": {
+        "width": 1120,
+        "height": 760,
+        "min-width": 760,
+        "min-height": 520
+      }
+    }
+  },
+  "contributions": {
+    "menu": [
+      {
+        "path": "i18n:menu.extension/Web 发布诊断中心",
+        "label": "打开诊断面板",
+        "message": "open-panel"
+      },
+      {
+        "path": "i18n:menu.extension/Web 发布诊断中心",
+        "label": "快速诊断",
+        "message": "quick-diagnose"
+      },
+      {
+        "path": "i18n:menu.extension/Web 发布诊断中心",
+        "label": "打开最新报告",
+        "message": "open-latest-report"
+      }
+    ],
+    "messages": {
+      "open-panel": { "methods": ["openPanel"] },
+      "panel-ready": { "methods": ["panelReady"] },
+      "quick-diagnose": { "methods": ["quickDiagnose"] },
+      "stop-diagnose": { "methods": ["stopDiagnose"] },
+      "open-latest-report": { "methods": ["openLatestReport"] },
+      "open-report-directory": { "methods": ["openReportDirectory"] },
+      "open-report": { "methods": ["openReport"] },
+      "compare-reports": { "methods": ["compareReports"] },
+      "get-state": { "methods": ["getState"] },
+      "save-settings": { "methods": ["saveSettings"] },
+      "load-browser-report": { "methods": ["loadBrowserReport"] },
+      "copy-browser-script": { "methods": ["copyBrowserScript"] },
+      "export-logs": { "methods": ["exportLogs"] },
+      "clear-logs": { "methods": ["clearLogs"] }
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "package_version": 2,
+  "name": "render-optimization-platform",
+  "version": "1.0.0",
+  "title": "渲染优化平台",
+  "description": "适用于 Cocos Creator 3.8.6 项目的只读渲染诊断工具。",
+  "author": "Gala Client",
+  "editor": ">=3.8.6 <3.9.0",
+  "main": "./main.js",
+  "panels": {
+    "default": {
+      "title": "渲染优化平台",
+      "main": "./panel/index.js",
+      "type": "dockable",
+      "size": {
+        "width": 1120,
+        "height": 720,
+        "min-width": 760,
+        "min-height": 480
+      }
+    },
+    "help": {
+      "title": "渲染优化平台使用帮助",
+      "main": "./panel/help.js",
+      "type": "simple",
+      "size": { "width": 560, "height": 520, "min-width": 380, "min-height": 300 }
+    }
+  },
+  "contributions": {
+    "builder": "./builder/index.js",
+    "menu": [
+      {
+        "path": "i18n:menu.extension/渲染优化平台",
+        "label": "打开平台",
+        "message": "open-panel"
+      },
+      {
+        "path": "i18n:menu.extension/渲染优化平台",
+        "label": "扫描项目",
+        "message": "scan-project"
+      },
+      {
+        "path": "i18n:menu.extension/渲染优化平台",
+        "label": "取消扫描",
+        "message": "cancel-scan"
+      },
+      {
+        "path": "i18n:menu.extension/渲染优化平台",
+        "label": "导出最新报告",
+        "message": "export-last-report"
+      },
+      {
+        "path": "i18n:menu.extension/渲染优化平台",
+        "label": "打开使用帮助",
+        "message": "open-help"
+      }
+    ],
+    "messages": {
+      "open-panel": { "methods": ["openPanel"] },
+      "open-help": { "methods": ["openHelp"] },
+      "scan-project": { "methods": ["scanProject"] },
+      "cancel-scan": { "methods": ["cancelScan"] },
+      "export-last-report": { "methods": ["exportLastReport"] },
+      "open-report-directory": { "methods": ["openReportDirectory"] },
+      "open-asset": { "methods": ["openAsset"] },
+      "get-state": { "methods": ["getState"] },
+      "state-updated": { "methods": ["default.updateState"] }
+    }
+  },
+  "scripts": {
+    "scan": "node cli/scan.js ../..",
+    "test": "node --test test/*.test.js"
+  }
+}

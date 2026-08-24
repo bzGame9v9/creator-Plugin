@@ -1,0 +1,83 @@
+CCEffect %{
+  techniques:
+  - passes:
+    - vert: multi-texture-batch-vs:vert
+      frag: multi-texture-batch-fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+      properties:
+        batchTexture1: { value: white }
+        batchTexture2: { value: white }
+        batchTexture3: { value: white }
+        batchTexture4: { value: white }
+        batchTexture5: { value: white }
+        batchTexture6: { value: white }
+        batchTexture7: { value: white }
+        alphaThreshold: { value: 0.5 }
+}%
+
+CCProgram multi-texture-batch-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+  in float a_texCoord1;
+
+  out vec4 color;
+  out vec2 uv0;
+  out float textureIndex;
+
+  vec4 vert () {
+    uv0 = a_texCoord;
+    color = a_color;
+    textureIndex = a_texCoord1;
+    return cc_matViewProj * vec4(a_position, 1.0);
+  }
+}%
+
+CCProgram multi-texture-batch-fs %{
+  precision highp float;
+  #include <builtin/internal/alpha-test>
+
+  in vec4 color;
+  in vec2 uv0;
+  in float textureIndex;
+
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+  uniform sampler2D batchTexture1;
+  uniform sampler2D batchTexture2;
+  uniform sampler2D batchTexture3;
+  uniform sampler2D batchTexture4;
+  uniform sampler2D batchTexture5;
+  uniform sampler2D batchTexture6;
+  uniform sampler2D batchTexture7;
+
+  vec4 sampleBatchTexture () {
+    if (textureIndex < 0.5) return texture(cc_spriteTexture, uv0);
+    if (textureIndex < 1.5) return texture(batchTexture1, uv0);
+    if (textureIndex < 2.5) return texture(batchTexture2, uv0);
+    if (textureIndex < 3.5) return texture(batchTexture3, uv0);
+    if (textureIndex < 4.5) return texture(batchTexture4, uv0);
+    if (textureIndex < 5.5) return texture(batchTexture5, uv0);
+    if (textureIndex < 6.5) return texture(batchTexture6, uv0);
+    return texture(batchTexture7, uv0);
+  }
+
+  vec4 frag () {
+    vec4 outputColor = sampleBatchTexture() * color;
+    ALPHA_TEST(outputColor);
+    return outputColor;
+  }
+}%

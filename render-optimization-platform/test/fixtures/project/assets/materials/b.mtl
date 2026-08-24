@@ -1,0 +1,9 @@
+{
+  "__type__": "cc.Material",
+  "_name": "Material B",
+  "_effectAsset": { "__uuid__": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+  "_techIdx": 0,
+  "_defines": [{ "USE_TEXTURE": true }],
+  "_states": [{ "blendState": { "targets": [{}] } }],
+  "_props": [{ "alphaThreshold": 0.5 }]
+}

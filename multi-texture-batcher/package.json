@@ -1,0 +1,67 @@
+{
+  "package_version": 2,
+  "name": "multi-texture-batcher",
+  "version": "0.3.2",
+  "title": "多纹理合批",
+  "description": "适用于 Cocos Creator 3.8.6 的 Sprite 与 Label Web 多纹理合批插件。",
+  "author": "Gala Client",
+  "editor": ">=3.8.6 <3.9.0",
+  "main": "./main.js",
+  "panels": {
+    "default": {
+      "title": "多纹理合批",
+      "main": "./panel/index.js",
+      "type": "simple",
+      "size": {
+        "width": 680,
+        "height": 500,
+        "min-width": 520,
+        "min-height": 360
+      }
+    },
+    "help": {
+      "title": "多纹理合批使用帮助",
+      "main": "./panel/help.js",
+      "type": "simple",
+      "size": { "width": 560, "height": 520, "min-width": 380, "min-height": 300 }
+    }
+  },
+  "contributions": {
+    "menu": [
+      {
+        "path": "i18n:menu.extension/多纹理合批",
+        "label": "打开面板",
+        "message": "open-panel"
+      },
+      {
+        "path": "i18n:menu.extension/多纹理合批",
+        "label": "启用合批运行时",
+        "message": "enable-runtime"
+      },
+      {
+        "path": "i18n:menu.extension/多纹理合批",
+        "label": "关闭合批运行时",
+        "message": "disable-runtime"
+      },
+      {
+        "path": "i18n:menu.extension/多纹理合批",
+        "label": "打开使用帮助",
+        "message": "open-help"
+      }
+    ],
+    "messages": {
+      "open-panel": { "methods": ["openPanel"] },
+      "open-help": { "methods": ["openHelp"] },
+      "enable-runtime": { "methods": ["enableRuntime"] },
+      "disable-runtime": { "methods": ["disableRuntime"] },
+      "set-master-enabled": { "methods": ["setMasterEnabled"] },
+      "get-state": { "methods": ["getState"] },
+      "scan-project": { "methods": ["scanProject"] },
+      "restore-last-conversion": { "methods": ["restoreLastConversion"] },
+      "state-updated": { "methods": ["default.updateState"] }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

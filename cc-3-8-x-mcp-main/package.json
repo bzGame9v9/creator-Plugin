@@ -1,0 +1,64 @@
+{
+  "package_version": 2,
+  "version": "2.0.0",
+  "name": "cc-3-8-x-mcp",
+  "title": "Cocos Creator 3.8.x MCP 服务",
+  "description": "把 Cocos Creator 3.8.x 编辑器能力（scene/asset-db/preview/local）以 MCP 协议暴露给外部 AI 客户端；兼容原 dev-reload 信号文件通道",
+  "license": "Apache-2.0",
+  "author": "付饶",
+  "editor": ">=3.8.0",
+  "main": "./main.js",
+  "panels": {
+    "default": {
+      "title": "Cocos MCP 工具",
+      "type": "dockable",
+      "main": "panel/index.js",
+      "size": {
+        "min-width": 340,
+        "min-height": 460,
+        "width": 400,
+        "height": 560
+      }
+    },
+    "help": {
+      "title": "Cocos MCP 工具使用帮助",
+      "type": "simple",
+      "main": "panel/help.js",
+      "size": { "width": 560, "height": 520, "min-width": 380, "min-height": 300 }
+    }
+  },
+  "contributions": {
+    "menu": [
+      {
+        "path": "i18n:menu.extension/Cocos MCP 工具",
+        "label": "功能面板",
+        "message": "open-panel"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos MCP 工具",
+        "label": "重启 MCP 服务",
+        "message": "restart-server"
+      },
+      {
+        "path": "i18n:menu.extension/Cocos MCP 工具",
+        "label": "打开使用帮助",
+        "message": "open-help"
+      }
+    ],
+    "messages": {
+      "open-panel": { "methods": ["openPanel"] },
+      "open-help": { "methods": ["openHelp"] },
+      "restart-server": { "methods": ["restartServer"] },
+      "get-status": { "methods": ["getStatus"] },
+      "get-mcp-config": { "methods": ["getMcpConfig"] },
+      "refresh-assets": { "methods": ["refreshAssets"] },
+      "query-preview-url": { "methods": ["queryPreviewUrl"] },
+      "trigger-refresh": { "methods": ["triggerRefresh"] },
+      "trigger-reimport": { "methods": ["triggerReimport"] },
+      "soft-reload-scene": { "methods": ["softReloadScene"] },
+      "clean-dev-dir": { "methods": ["cleanDevDir"] },
+      "list-worktrees": { "methods": ["listWorktrees"] },
+      "open-dev-dir": { "methods": ["openDevDir"] }
+    }
+  }
+}

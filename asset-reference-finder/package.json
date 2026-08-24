@@ -1,0 +1,73 @@
+{
+  "package_version": 2,
+  "name": "asset-reference-finder",
+  "version": "0.1.0",
+  "title": "资源引用查找器",
+  "description": "查找引用所选资源的文件，并以清晰的树形结构展示。",
+  "author": "Codex",
+  "editor": ">=3.8.0",
+  "main": "./main.js",
+  "panels": {
+    "default": {
+      "title": "资源引用",
+      "main": "./panel/index.js",
+      "type": "simple",
+      "size": {
+        "width": 520,
+        "height": 520,
+        "min-width": 360,
+        "min-height": 260
+      }
+    },
+    "help": {
+      "title": "资源引用查找器使用帮助",
+      "main": "./panel/help.js",
+      "type": "simple",
+      "size": { "width": 560, "height": 520, "min-width": 380, "min-height": 300 }
+    }
+  },
+  "contributions": {
+    "menu": [
+      {
+        "path": "i18n:menu.extension/资源引用查找器",
+        "label": "查找资源引用",
+        "message": "find-selected-references"
+      },
+      {
+        "path": "i18n:menu.extension/资源引用查找器",
+        "label": "打开使用帮助",
+        "message": "open-help"
+      }
+    ],
+    "shortcuts": [
+      {
+        "message": "find-selected-references",
+        "win": "F6",
+        "mac": "F6"
+      }
+    ],
+    "messages": {
+      "find-selected-references": {
+        "methods": [
+          "findSelectedReferences"
+        ]
+      },
+      "open-help": { "methods": ["openHelp"] },
+      "get-last-result": {
+        "methods": [
+          "getLastResult"
+        ]
+      },
+      "clean-selected-prefab-redundancy": {
+        "methods": [
+          "cleanSelectedPrefabRedundancy"
+        ]
+      },
+      "result-updated": {
+        "methods": [
+          "default.updateResult"
+        ]
+      }
+    }
+  }
+}

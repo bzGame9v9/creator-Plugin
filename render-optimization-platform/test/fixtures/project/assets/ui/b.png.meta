@@ -1,0 +1,18 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "uuid": "22222222-2222-4222-8222-222222222222",
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "22222222-2222-4222-8222-222222222222@6c48a",
+      "userData": { "minfilter": "linear", "magfilter": "linear", "mipfilter": "none" }
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "22222222-2222-4222-8222-222222222222@f9941",
+      "userData": { "rawWidth": 64, "rawHeight": 64, "packable": true, "atlasUuid": "" }
+    }
+  },
+  "userData": { "type": "sprite-frame", "hasAlpha": true }
+}
