@@ -37,6 +37,10 @@ function createIntegrityManifest(tree, audit, context) {
         releasePipelineVersion: readPipelineVersion(context.packageRoot),
         platform: context.platform,
         outputName: context.outputName,
+        versionAnchor: context.buildFingerprint ? {
+            fingerprint: context.buildFingerprint.fingerprint,
+            path: context.buildFingerprint.rootIndex,
+        } : null,
         entry: collectEntryFiles(tree),
         bundles,
         files,

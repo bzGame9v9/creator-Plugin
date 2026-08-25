@@ -11,6 +11,8 @@ const HASHED_NAME_PATTERN = /^(.*)\.([a-f0-9]{5,32})(\.[^.]+)$/i;
 const HASHED_NAME_LENGTH = 5;
 const MAX_ROUNDS = 12;
 const BUNDLE_HASH_CONTRACT = 'gala-cocos-bundle-v1';
+const BUILD_FINGERPRINT_GLOBAL = '__GALA_BUILD_FINGERPRINT__';
+const BUILD_FINGERPRINT_SCRIPT_ID = 'gala-build-fingerprint';
 
 async function run(context) {
     const config = context.config.fingerprint || {};
@@ -85,11 +87,14 @@ async function run(context) {
         ].join(' '));
     }
 
+    const buildFingerprint = injectBuildFingerprint(tree, hashLength);
+    if (buildFingerprint.changed) changedFiles.add('index.html');
     const audit = auditTree(tree, managed, renameHistory, bundlePairs, algorithm, hashLength, rounds);
     if (audit.errors.length) {
         throw new Error(`Release asset audit failed:\n- ${audit.errors.join('\n- ')}`);
     }
 
+    context.buildFingerprint = buildFingerprint;
     const integrityManifest = createIntegrityManifest(tree, audit, context);
     tree.set(MANIFEST_FILE, Buffer.from(JSON.stringify(integrityManifest, null, 2), 'utf8'));
 
@@ -108,6 +113,44 @@ async function run(context) {
         changedFiles: Array.from(changedFiles).sort(),
         audit,
         integrityManifest,
+        buildFingerprint,
+    };
+}
+
+function injectBuildFingerprint(tree, hashLength) {
+    const rootEntries = Array.from(tree.keys())
+        .filter((relative) => new RegExp(`^index\\.([a-f0-9]{${hashLength}})\\.js$`, 'i').test(relative))
+        .sort();
+    if (rootEntries.length !== 1) {
+        throw new Error(`Expected exactly one fingerprinted root index, found ${rootEntries.length}`);
+    }
+    if (!tree.has('index.html')) {
+        throw new Error('Cannot inject build fingerprint: index.html is missing');
+    }
+
+    const rootIndex = rootEntries[0];
+    const fingerprint = getHashSegment(rootIndex);
+    if (!fingerprint) {
+        throw new Error(`Cannot extract build fingerprint from ${rootIndex}`);
+    }
+
+    const script = `<script id="${BUILD_FINGERPRINT_SCRIPT_ID}">window.${BUILD_FINGERPRINT_GLOBAL}="${fingerprint}";</script>`;
+    const html = tree.get('index.html').toString('utf8');
+    const existing = new RegExp(`<script\\s+id=["']${BUILD_FINGERPRINT_SCRIPT_ID}["'][^>]*>[\\s\\S]*?<\\/script>`, 'i');
+    let output;
+    if (existing.test(html)) {
+        output = html.replace(existing, script);
+    } else if (/<head(?:\s[^>]*)?>/i.test(html)) {
+        output = html.replace(/<head(?:\s[^>]*)?>/i, (match) => `${match}\n  ${script}`);
+    } else {
+        throw new Error('Cannot inject build fingerprint: index.html has no head element');
+    }
+
+    tree.set('index.html', Buffer.from(output, 'utf8'));
+    return {
+        fingerprint,
+        rootIndex,
+        changed: output !== html,
     };
 }
 
