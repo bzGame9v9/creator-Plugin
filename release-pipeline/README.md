@@ -12,7 +12,7 @@ Both entry points use the same task pipeline in `lib/pipeline.js`.
 ## Default Tasks
 
 ```text
-cleanBackup -> obfuscateJs -> fingerprintBuild -> zipBuild -> writeReport
+cleanBackup -> obfuscateJs -> fingerprintBuild -> zipBuild -> archiveRelease -> writeReport
 ```
 
 Task order is configured in `config/default-config.json`.
@@ -57,6 +57,8 @@ The default obfuscation config uses two groups:
 The root SDK group keeps conservative options and reserves known `window.*` callback names. Engine files, polyfills, and bootstrap entry files stay excluded.
 
 `fingerprintBuild` is a required release boundary. It computes the configured MD5 prefix from final bytes, rewrites HTML/JS/JSON references, propagates `src/import-map` and Cocos `settings` changes, audits local JS/Worker URLs, and only then allows `zipBuild` to run. The task is automatically inserted after `obfuscateJs` or before `zipBuild` when a custom task list omits it.
+
+`archiveRelease` runs only after a successful `zipBuild`. It reads the single `ALL_APP_SOURCE_CONFIG.app_version`, combines it with the final root entry fingerprint, and copies the verified ZIP to `build/releases/<environment>/<appVersion_fingerprint>/<Asia-Shanghai timestamp>/`. A unique run directory is reserved for every execution, so rebuilding the same fingerprint never overwrites a previous archive. The archive includes `release-archive.json` with the raw file SHA256, ZIP payload SHA256, release ID, environment, and version anchor.
 
 After fingerprint propagation converges, the task treats the root `index.<hash>.js` referenced directly by `index.html` as the human-readable version anchor. It injects that exact hash into the final HTML as `window.__GALA_BUILD_FINGERPRINT__`, records the same path/hash in `release-integrity-manifest.json.versionAnchor`, and then performs the final audit. Runtime version labels use `appVersion_fingerprint`; complete artifact integrity continues to use `releaseId` and SHA256.
 

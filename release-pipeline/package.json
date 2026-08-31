@@ -1,9 +1,9 @@
 {
   "package_version": 2,
   "name": "release-pipeline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "title": "发布流水线",
-  "description": "用于混淆、指纹和打包的构建后处理流水线。",
+  "description": "用于混淆、指纹、打包和版本归档的构建后处理流水线。",
   "author": "Codex",
   "editor": ">=3.8.0",
   "main": "./main.js",

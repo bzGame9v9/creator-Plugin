@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolveAppVersion, resolveReleaseEnvironment } = require('./release-identity');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_CONFIG_PATH = path.join(PACKAGE_ROOT, 'config', 'default-config.json');
@@ -16,10 +17,14 @@ function createContext(input) {
     const buildPath = input.buildPath || options.buildPath || 'project://build';
     const buildBase = resolveProjectPath(projectRoot, buildPath);
     const buildRoot = path.resolve(input.buildRoot || inferBuildRoot(projectRoot, options, input.result, buildBase, outputName));
+    const environment = resolveReleaseEnvironment(input.environment, outputName);
+    const appVersion = resolveAppVersion(projectRoot, input.appVersion);
     const report = {
         source: input.source || 'unknown',
         platform,
         outputName,
+        environment,
+        appVersion,
         projectRoot,
         buildRoot,
         startedAt: new Date().toISOString(),
@@ -35,6 +40,8 @@ function createContext(input) {
         result: input.result || {},
         platform,
         outputName,
+        environment,
+        appVersion,
         buildPath,
         buildBase,
         buildRoot,
