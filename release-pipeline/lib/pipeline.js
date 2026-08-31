@@ -4,6 +4,7 @@ const cleanBackup = require('./tasks/clean-backup');
 const obfuscateJs = require('./tasks/obfuscate-js');
 const fingerprintBuild = require('./tasks/fingerprint-build');
 const zipBuild = require('./tasks/zip-build');
+const archiveRelease = require('./tasks/archive-release');
 const writeReport = require('./tasks/write-report');
 
 const TASKS = {
@@ -11,6 +12,7 @@ const TASKS = {
     obfuscateJs,
     fingerprintBuild,
     zipBuild,
+    archiveRelease,
     writeReport,
 };
 
@@ -26,7 +28,7 @@ async function runPipeline(context) {
         return context.report;
     }
 
-    const tasks = ensureFingerprintTask(Array.isArray(config.tasks) ? config.tasks : []);
+    const tasks = ensureArchiveTask(ensureFingerprintTask(Array.isArray(config.tasks) ? config.tasks : []));
     context.logger.info(`start ${context.platform} pipeline at ${context.buildRoot}`);
 
     for (const entry of tasks) {
@@ -99,6 +101,23 @@ function ensureFingerprintTask(entries) {
 
 function hasEnabledFingerprint(entries) {
     return entries.some((entry) => entry.name === 'fingerprintBuild' && entry.enabled !== false);
+}
+
+function ensureArchiveTask(entries) {
+    const normalized = entries.map(normalizeTask);
+    const hasExplicitArchive = normalized.some((entry) => entry.name === 'archiveRelease');
+    const output = [];
+
+    normalized.forEach((entry, index) => {
+        output.push(entry);
+        if (entry.name !== 'zipBuild' || entry.enabled === false) return;
+
+        if (!hasExplicitArchive) {
+            output.push({ name: 'archiveRelease', enabled: true, options: { automatic: true } });
+        }
+    });
+
+    return output;
 }
 
 function writeFinalReportIfConfigured(context) {

@@ -21,7 +21,7 @@ exports.configs = {
                 render: {
                     ui: 'ui-input',
                     attributes: {
-                placeholder: 'cleanBackup,obfuscateJs,fingerprintBuild,zipBuild,writeReport',
+                    placeholder: 'cleanBackup,obfuscateJs,fingerprintBuild,zipBuild,archiveRelease,writeReport',
                     },
                 },
             },
