@@ -338,9 +338,10 @@ function rewriteJson(source, relative, renameMap) {
         throw new Error(`Cannot parse JSON while rewriting ${relative}: ${error.message}`);
     }
     let changed = false;
+    const replacements = createReferenceReplacementMap(relative, renameMap);
     const rewrite = (item) => {
         if (typeof item === 'string') {
-            const output = replaceTextReferences(item, relative, renameMap);
+            const output = replaceReferenceValue(item, replacements);
             if (output !== item) changed = true;
             return output;
         }
@@ -364,16 +365,31 @@ function rewriteJson(source, relative, renameMap) {
 }
 
 function replaceTextReferences(source, relative, renameMap) {
-    let output = source;
-    const replacements = [];
+    const replacements = createReferenceReplacementMap(relative, renameMap);
+    return source.replace(newAssetPattern(), (match, quote, reference) => {
+        const output = replaceReferenceValue(reference, replacements);
+        return output === reference ? match : `${quote}${output}${quote}`;
+    });
+}
+
+function createReferenceReplacementMap(relative, renameMap) {
+    const replacements = new Map();
     renameMap.forEach((to, from) => {
-        createReferenceVariants(relative, from, to).forEach((pair) => replacements.push(pair));
+        createReferenceVariants(relative, from, to).forEach((pair) => {
+            if (pair.from) replacements.set(pair.from, pair.to);
+        });
     });
-    replacements.sort((left, right) => right.from.length - left.from.length);
-    replacements.forEach((pair) => {
-        if (pair.from) output = output.split(pair.from).join(pair.to);
-    });
-    return output;
+    return replacements;
+}
+
+function replaceReferenceValue(value, replacements) {
+    if (replacements.has(value)) return replacements.get(value);
+
+    const suffixIndex = value.search(/[?#]/);
+    if (suffixIndex < 0) return value;
+    const pathPart = value.slice(0, suffixIndex);
+    const replacement = replacements.get(pathPart);
+    return replacement ? replacement + value.slice(suffixIndex) : value;
 }
 
 function createReferenceVariants(sourceRelative, fromRelative, toRelative) {

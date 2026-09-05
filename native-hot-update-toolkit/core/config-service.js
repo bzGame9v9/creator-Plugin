@@ -1,0 +1,181 @@
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+const ENVIRONMENTS = new Set(['dev', 'test', 'prod']);
+
+function configPaths(projectRoot) {
+    const root = path.join(projectRoot, 'tools', 'android-release');
+    return {
+        local: path.join(root, 'config.local.json'),
+        example: path.join(root, 'config.example.json'),
+    };
+}
+
+function ensureLocalConfig(projectRoot) {
+    const paths = configPaths(projectRoot);
+    if (fs.existsSync(paths.local)) return paths.local;
+    if (!fs.existsSync(paths.example)) throw new Error(`Android release config template not found: ${paths.example}`);
+    fs.copyFileSync(paths.example, paths.local);
+    return paths.local;
+}
+
+function readConfig(projectRoot) {
+    const file = ensureLocalConfig(projectRoot);
+    return {
+        file,
+        value: JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')),
+    };
+}
+
+function summarizeConfig(projectRoot) {
+    const { file, value } = readConfig(projectRoot);
+    const environment = ENVIRONMENTS.has(value.environment) ? value.environment : 'dev';
+    const environmentConfig = value.environments && value.environments[environment] || {};
+    const environments = Object.fromEntries(Object.entries(value.environments || {}).map(([name, item]) => [name, {
+        releaseSequence: item.releaseSequence || value.releaseSequence || 0,
+        appName: item.appName || '',
+        packageName: item.packageName || '',
+        baseUrl: item.baseUrl || '',
+        outputRoot: item.outputRoot || '',
+    }]));
+    const bundles = Object.fromEntries((value.bundles || []).map(bundle => [bundle.bundleName, {
+        requiredAtStartup: bundle.requiredAtStartup === true,
+        includeInApk: bundle.includeInApk === true,
+    }]));
+    return {
+        file,
+        environment,
+        releaseId: `${environment}_${environmentConfig.releaseSequence || value.releaseSequence || 0}`,
+        releaseSequence: environmentConfig.releaseSequence || value.releaseSequence || 0,
+        confirmed: value.pipeline && value.pipeline.confirmed === true,
+        versionCode: value.gradle && value.gradle.versionCode || 0,
+        versionName: value.gradle && value.gradle.versionName || '',
+        environmentConfig: {
+            appName: environmentConfig.appName || '',
+            packageName: environmentConfig.packageName || '',
+            baseUrl: environmentConfig.baseUrl || '',
+            outputRoot: environmentConfig.outputRoot || '',
+        },
+        environments,
+        creator: {
+            executable: value.creator && value.creator.executable || '',
+            sdkPath: value.creator && value.creator.android && value.creator.android.sdkPath || '',
+            ndkPath: value.creator && value.creator.android && value.creator.android.ndkPath || '',
+            javaHome: value.creator && value.creator.android && value.creator.android.javaHome || '',
+            appABIs: value.creator && value.creator.android && value.creator.android.appABIs || [],
+        },
+        signing: {
+            required: value.signing && value.signing.required === true,
+            keyId: value.signing && value.signing.keyId || '',
+            privateKeyPath: value.signing && value.signing.privateKeyPath || '',
+        },
+        bundles,
+        pipeline: {
+            stateFile: value.pipeline && value.pipeline.stateFile || '',
+            reportRoot: value.pipeline && value.pipeline.reportRoot || '',
+            artifactRoot: value.pipeline && value.pipeline.artifactRoot || '',
+            runChecks: !value.pipeline || value.pipeline.runChecks !== false,
+        },
+    };
+}
+
+function saveConfig(projectRoot, patch) {
+    const { file, value } = readConfig(projectRoot);
+    const environment = String(patch.environment || '').trim();
+    if (!ENVIRONMENTS.has(environment)) throw new Error(`Unsupported environment: ${environment}`);
+    const sequence = positiveInteger(patch.releaseSequence, 'releaseSequence');
+    const versionCode = positiveInteger(patch.versionCode, 'versionCode');
+    const versionName = requiredText(patch.versionName, 'versionName');
+    const baseUrl = normalizeEnvironmentBaseUrl(
+        projectRoot,
+        requiredText(patch.environmentConfig && patch.environmentConfig.baseUrl, 'baseUrl'),
+        environment,
+    );
+
+    value.environment = environment;
+    delete value.releaseId;
+    delete value.releaseSequence;
+    value.environments = value.environments || {};
+    value.environments[environment] = {
+        ...(value.environments[environment] || {}),
+        releaseSequence: sequence,
+        appName: requiredText(patch.environmentConfig.appName, 'appName'),
+        packageName: requiredText(patch.environmentConfig.packageName, 'packageName'),
+        baseUrl,
+        outputRoot: requiredText(patch.environmentConfig.outputRoot, 'outputRoot'),
+    };
+    value.gradle = {
+        ...(value.gradle || {}),
+        versionCode,
+        versionName,
+    };
+    Object.values(value.environments).forEach(item => delete item.releaseIdPrefix);
+    value.creator = value.creator || {};
+    value.creator.executable = requiredText(patch.creator.executable, 'Creator executable');
+    value.creator.android = {
+        ...(value.creator.android || {}),
+        sdkPath: requiredText(patch.creator.sdkPath, 'Android SDK path'),
+        ndkPath: requiredText(patch.creator.ndkPath, 'Android NDK path'),
+        javaHome: requiredText(patch.creator.javaHome, 'Java home'),
+        appABIs: String(patch.creator.appABIs || '').split(',').map(item => item.trim()).filter(Boolean),
+    };
+    value.signing = {
+        ...(value.signing || {}),
+        required: patch.signing && patch.signing.required === true,
+        keyId: String(patch.signing && patch.signing.keyId || '').trim(),
+        privateKeyPath: String(patch.signing && patch.signing.privateKeyPath || '').trim(),
+    };
+    value.pipeline = {
+        ...(value.pipeline || {}),
+        confirmed: patch.confirmed === true,
+        runChecks: !patch.pipeline || patch.pipeline.runChecks !== false,
+        stateFile: requiredText(patch.pipeline.stateFile, 'stateFile'),
+        reportRoot: requiredText(patch.pipeline.reportRoot, 'reportRoot'),
+        artifactRoot: requiredText(patch.pipeline.artifactRoot, 'artifactRoot'),
+    };
+    for (const bundle of value.bundles || []) {
+        const next = patch.bundles && patch.bundles[bundle.bundleName];
+        if (!next) continue;
+        bundle.requiredAtStartup = next.requiredAtStartup === true;
+        bundle.includeInApk = next.includeInApk === true;
+        delete bundle.version;
+        delete bundle.incrementalZipThreshold;
+        delete bundle.restartPolicy;
+        delete bundle.previousProjectManifest;
+    }
+    fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    return summarizeConfig(projectRoot);
+}
+
+function positiveInteger(value, label) {
+    const number = Number(value);
+    if (!Number.isSafeInteger(number) || number <= 0) throw new Error(`${label} must be a positive integer`);
+    return number;
+}
+
+function requiredText(value, label) {
+    const text = String(value || '').trim();
+    if (!text) throw new Error(`${label} is required`);
+    return text;
+}
+
+function normalizeEnvironmentBaseUrl(projectRoot, value, environment) {
+    const projectModule = path.join(projectRoot, 'tools', 'native-hot-update-toolkit', 'lib', 'paths.js');
+    const sourceModule = path.resolve(__dirname, '..', '..', 'lib', 'paths.js');
+    const modulePath = fs.existsSync(projectModule) ? projectModule : sourceModule;
+    if (!fs.existsSync(modulePath)) {
+        throw new Error(`Native hot-update toolkit core not found: ${projectModule}`);
+    }
+    const { normalizeBaseUrl } = require(modulePath);
+    return normalizeBaseUrl(value, { allowHttp: environment !== 'prod' });
+}
+
+module.exports = {
+    configPaths,
+    ensureLocalConfig,
+    readConfig,
+    saveConfig,
+    summarizeConfig,
+};

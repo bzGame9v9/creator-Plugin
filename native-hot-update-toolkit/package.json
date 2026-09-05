@@ -1,0 +1,48 @@
+{
+  "package_version": 2,
+  "name": "native-hot-update-toolkit",
+  "version": "0.6.0",
+  "title": "Android 热更新中心",
+  "description": "Android base/login/hall 命令行与可视化发布、配置和 manifest 检查中心。",
+  "author": "Gala Client",
+  "editor": ">=3.8.0",
+  "main": "./main.js",
+  "panels": {
+    "default": {
+      "title": "Android 热更新中心",
+      "main": "./panel/index.js",
+      "type": "dockable",
+      "size": {
+        "width": 1180,
+        "height": 780,
+        "min-width": 820,
+        "min-height": 600
+      }
+    }
+  },
+  "contributions": {
+    "menu": [
+      {
+        "path": "项目工具",
+        "label": "热更新",
+        "message": "open-panel"
+      }
+    ],
+    "messages": {
+      "open-panel": { "methods": ["openPanel"] },
+      "panel-ready": { "methods": ["panelReady"] },
+      "get-state": { "methods": ["getState"] },
+      "initialize-config": { "methods": ["initializeConfig"] },
+      "save-config": { "methods": ["saveConfig"] },
+      "run-pipeline": { "methods": ["runPipeline"] },
+      "stop-pipeline": { "methods": ["stopPipeline"] },
+      "refresh-releases": { "methods": ["refreshReleases"] },
+      "select-release": { "methods": ["selectRelease"] },
+      "load-release-file": { "methods": ["loadReleaseFile"] },
+      "load-legacy-manifest": { "methods": ["loadLegacyManifest"] },
+      "save-legacy-manifest": { "methods": ["saveLegacyManifest"] },
+      "open-path": { "methods": ["openPath"] },
+      "state-updated": { "methods": ["default.updateState"] }
+    }
+  }
+}
