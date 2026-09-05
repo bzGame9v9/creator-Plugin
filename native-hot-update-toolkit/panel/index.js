@@ -25,7 +25,7 @@ exports.template = [
   '      <div id="buildSummary" class="summary"></div>',
   '      <div class="section-title">发布版本</div>',
   '      <div class="form-grid">',
-  '        <label>热更发布序号（releaseSequence）<input id="releaseSequence" type="number" min="1" step="1"></label>',
+  '        <label>首次/重置热更序号（正常构建自动 +1）<input id="releaseSequence" type="number" min="1" step="1"></label>',
   '      </div>',
   '      <div class="section-title">当前环境</div>',
   '      <div class="form-grid">',
@@ -48,6 +48,7 @@ exports.template = [
   '        <label class="span-2">构建状态文件（stateFile）<input id="stateFile" type="text"></label>',
   '        <label>日志报告目录（reportRoot）<input id="reportRoot" type="text"></label>',
   '        <label>APK 制品目录（artifactRoot）<input id="artifactRoot" type="text"></label>',
+  '        <label class="span-2">长期归档根目录（archiveRoot）<input id="archiveRoot" type="text"></label>',
   '      </div>',
   '      <div id="configPath" class="path-line"></div>',
   '      <div class="action-row"><ui-button id="validate">校验公共配置（不构建）</ui-button></div>',
@@ -56,7 +57,7 @@ exports.template = [
   '      <div id="baseSummary" class="summary"></div>',
   '      <div class="section-title">APK 版本</div>',
   '      <div class="form-grid">',
-  '        <label>Android 内部版本号（versionCode）<input id="versionCode" type="number" min="1" step="1"></label>',
+  '        <label>首次/重置 APK versionCode（正常构建自动 +1）<input id="versionCode" type="number" min="1" step="1"></label>',
   '        <label>应用显示版本（versionName）<input id="versionName" type="text"></label>',
   '      </div>',
   '      <div class="section-title">资源包内置策略</div>',
@@ -151,7 +152,7 @@ exports.$ = {
   ndkPath: '#ndkPath', javaHome: '#javaHome', appABIs: '#appABIs', keyId: '#keyId', privateKeyPath: '#privateKeyPath',
   signingRequired: '#signingRequired', loginInApk: '#loginInApk', hallInApk: '#hallInApk',
   stateFile: '#stateFile', reportRoot: '#reportRoot',
-  artifactRoot: '#artifactRoot', configPath: '#configPath', releaseSelect: '#releaseSelect', releaseFile: '#releaseFile',
+  artifactRoot: '#artifactRoot', archiveRoot: '#archiveRoot', configPath: '#configPath', releaseSelect: '#releaseSelect', releaseFile: '#releaseFile',
   reloadReleases: '#reloadReleases', openRelease: '#openRelease', releaseSummary: '#releaseSummary', releaseJson: '#releaseJson',
   legacyName: '#legacyName', loadLegacy: '#loadLegacy', saveLegacy: '#saveLegacy', legacyPath: '#legacyPath',
   legacySummary: '#legacySummary', legacyBackup: '#legacyBackup', legacyJson: '#legacyJson', error: '#error',
@@ -180,10 +181,19 @@ function setChecked(panel, key, value) {
 function loadEnvironmentFields(panel, config, environment) {
   const item = config && config.environments && config.environments[environment] || {};
   setValue(panel, 'releaseSequence', item.releaseSequence);
+  setValue(panel, 'versionCode', item.versionCode || config.versionCode);
+  setVersionFieldsManaged(panel, item.hasPreviousRelease === true);
   setValue(panel, 'appName', item.appName);
   setValue(panel, 'packageName', item.packageName);
   setValue(panel, 'baseUrl', item.baseUrl);
   setValue(panel, 'outputRoot', item.outputRoot);
+}
+
+function setVersionFieldsManaged(panel, managed) {
+  panel.$.releaseSequence.disabled = managed;
+  panel.$.versionCode.disabled = managed;
+  panel.$.releaseSequence.title = managed ? '根据该环境上次成功构建自动加 1；删除该环境 state 后可手动设置' : '该环境没有成功记录，可手动设置首次版本';
+  panel.$.versionCode.title = panel.$.releaseSequence.title;
 }
 
 function renderConfig(panel, config) {
@@ -209,6 +219,7 @@ function renderConfig(panel, config) {
   setValue(panel, 'stateFile', config.pipeline && config.pipeline.stateFile);
   setValue(panel, 'reportRoot', config.pipeline && config.pipeline.reportRoot);
   setValue(panel, 'artifactRoot', config.pipeline && config.pipeline.artifactRoot);
+  setValue(panel, 'archiveRoot', config.pipeline && config.pipeline.archiveRoot);
   panel.$.configPath.textContent = config.file || '';
   formInitialized = true;
 }
@@ -253,14 +264,16 @@ function renderState(panel) {
     ? [
       '配置：' + config.file,
       '环境：' + formatEnvironment(config.environment),
-      '发布标识：' + config.releaseId + ' / ' + config.releaseSequence,
+      '本次发布：' + config.releaseId + ' / ' + config.releaseSequence,
+      '版本来源：' + (config.versionManagedByState ? '上次成功记录自动 +1' : '首次/重置手动起点'),
       '真实构建：' + (config.confirmed ? '已允许' : '已锁定')
     ].join('\n')
     : '配置不可用。';
   panel.$.baseSummary.textContent = config
     ? [
       '环境：' + formatEnvironment(config.environment),
-      'APK 版本：' + config.versionName + ' (' + config.versionCode + ')',
+      '本次 APK：' + config.versionName + ' (' + config.versionCode + ')' +
+        (config.previousVersionCode ? '，上次 ' + config.previousVersionCode : ''),
       '内置资源包：' + (['login', 'hall'].filter(function (name) {
         return config.bundles && config.bundles[name] && config.bundles[name].includeInApk;
       }).join(', ') || '无'),
@@ -270,7 +283,8 @@ function renderState(panel) {
   panel.$.hotSummary.textContent = config
     ? [
       '环境：' + formatEnvironment(config.environment),
-      '发布标识：' + config.releaseId + ' / ' + config.releaseSequence,
+      '本次发布：' + config.releaseId + ' / ' + config.releaseSequence +
+        (config.previousReleaseSequence ? '，上次 ' + config.previousReleaseSequence : ''),
       '更新范围：完整 Native data',
       '发布描述文件签名：' + (config.signing && config.signing.required ? '要求签名' : '可选')
     ].join('\n')
@@ -284,7 +298,9 @@ function renderState(panel) {
   panel.$.completionTitle.textContent = completion && completion.title || '';
   panel.$.completionPaths.textContent = completion ? [
     completion.apkPath ? '基础 APK：' + completion.apkPath : '',
-    completion.versionDirectory ? '上传版本目录：' + completion.versionDirectory : ''
+    completion.versionDirectory ? '上传版本目录：' + completion.versionDirectory : '',
+    completion.archiveHotfixDirectory ? '热更归档：' + completion.archiveHotfixDirectory : '',
+    completion.archiveApkPath ? 'APK 归档：' + completion.archiveApkPath : ''
   ].filter(Boolean).join('\n') : '';
   panel.$.openApkResult.style.display = completion && completion.apkDirectory ? 'inline-flex' : 'none';
   panel.$.openHotUpdateResult.style.display = completion && completion.hotUpdateRoot ? 'inline-flex' : 'none';
@@ -348,7 +364,8 @@ function readForm(panel) {
       runChecks: panel.$.runChecks.checked,
       stateFile: panel.$.stateFile.value,
       reportRoot: panel.$.reportRoot.value,
-      artifactRoot: panel.$.artifactRoot.value
+      artifactRoot: panel.$.artifactRoot.value,
+      archiveRoot: panel.$.archiveRoot.value
     }
   };
 }
@@ -444,7 +461,7 @@ exports.ready = async function ready() {
     'appName', 'packageName', 'baseUrl', 'outputRoot', 'creatorExecutable', 'sdkPath',
     'ndkPath', 'javaHome', 'appABIs', 'keyId', 'privateKeyPath', 'signingRequired',
     'loginInApk', 'hallInApk',
-    'stateFile', 'reportRoot', 'artifactRoot'
+    'stateFile', 'reportRoot', 'artifactRoot', 'archiveRoot'
   ];
   configKeys.forEach(function (key) {
     panel.$[key].addEventListener('input', function () { formDirty = true; });

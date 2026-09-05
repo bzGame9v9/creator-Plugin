@@ -1,7 +1,7 @@
 {
   "package_version": 2,
   "name": "native-hot-update-toolkit",
-  "version": "0.6.0",
+  "version": "0.6.2",
   "title": "Android 热更新中心",
   "description": "Android base/login/hall 命令行与可视化发布、配置和 manifest 检查中心。",
   "author": "Gala Client",

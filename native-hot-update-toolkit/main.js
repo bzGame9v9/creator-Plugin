@@ -268,7 +268,7 @@ function friendlyBuildError(value) {
     if (match) return `基础 APK versionCode ${match[1]} 必须大于上一基础包 ${match[2]}，请改为至少 ${Number(match[2]) + 1}。`;
     match = text.match(/Immutable release already exists:\s*(.+)/i);
     if (match) return `热更版本目录已经存在，不能覆盖：${match[1]}。请提高当前环境的热更版本号。`;
-    if (/prod release requires signing\.privateKeyPath/i.test(text)) return '正式服构建必须配置发布签名私钥 privateKeyPath。';
+    if (/signing\.required=true requires signing\.privateKeyPath/i.test(text)) return '已开启发布描述文件签名，请配置 PEM 私钥路径，或关闭“要求发布描述文件签名”。';
     return text.replace(/^Error:\s*/i, '').split(/\r?\n/, 1)[0];
 }
 
@@ -294,6 +294,7 @@ function readCompletion(root, mode, environment) {
 
     const apkPath = mode === 'base-apk' && completed.apk && completed.apk.path || '';
     const versionDirectory = completed.releaseDir ? path.dirname(completed.releaseDir) : '';
+    const archive = completed.archive || {};
     return {
         mode,
         environment,
@@ -305,6 +306,8 @@ function readCompletion(root, mode, environment) {
         versionDirectory,
         releaseDirectory: completed.releaseDir || '',
         zipDirectory: completed.legacyCompatibility && completed.legacyCompatibility.root || '',
+        archiveHotfixDirectory: archive.hotfixDirectory || '',
+        archiveApkPath: archive.apkPath || '',
     };
 }
 
@@ -312,6 +315,8 @@ function appendCompletionLogs(completion) {
     appendLog('完成', completion.title);
     if (completion.apkPath) appendLog('完成', `基础 APK：${completion.apkPath}`);
     if (completion.versionDirectory) appendLog('完成', `上传版本目录：${completion.versionDirectory}`);
+    if (completion.archiveHotfixDirectory) appendLog('归档', `热更归档：${completion.archiveHotfixDirectory}`);
+    if (completion.archiveApkPath) appendLog('归档', `APK 归档：${completion.archiveApkPath}`);
 }
 
 async function runPipeline(input = {}) {

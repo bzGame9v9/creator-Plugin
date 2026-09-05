@@ -32,14 +32,22 @@ function readConfig(projectRoot) {
 function summarizeConfig(projectRoot) {
     const { file, value } = readConfig(projectRoot);
     const environment = ENVIRONMENTS.has(value.environment) ? value.environment : 'dev';
-    const environmentConfig = value.environments && value.environments[environment] || {};
+    const configuredVersionCode = positiveIntegerOrDefault(value.gradle && value.gradle.versionCode, 1);
+    const stateFile = resolveConfiguredPath(projectRoot, value.pipeline && value.pipeline.stateFile);
+    const releaseState = readReleaseState(stateFile);
     const environments = Object.fromEntries(Object.entries(value.environments || {}).map(([name, item]) => [name, {
-        releaseSequence: item.releaseSequence || value.releaseSequence || 0,
+        releaseSequence: nextReleaseSequence(releaseState.environments && releaseState.environments[name],
+            item.releaseSequence || value.releaseSequence),
+        versionCode: nextVersionCode(releaseState.environments && releaseState.environments[name], configuredVersionCode),
+        previousReleaseSequence: Number(releaseState.environments && releaseState.environments[name]?.releaseSequence) || 0,
+        previousVersionCode: Number(releaseState.environments && releaseState.environments[name]?.apk?.versionCode) || 0,
+        hasPreviousRelease: !!(releaseState.environments && releaseState.environments[name]),
         appName: item.appName || '',
         packageName: item.packageName || '',
         baseUrl: item.baseUrl || '',
         outputRoot: item.outputRoot || '',
     }]));
+    const environmentConfig = environments[environment] || {};
     const bundles = Object.fromEntries((value.bundles || []).map(bundle => [bundle.bundleName, {
         requiredAtStartup: bundle.requiredAtStartup === true,
         includeInApk: bundle.includeInApk === true,
@@ -49,8 +57,11 @@ function summarizeConfig(projectRoot) {
         environment,
         releaseId: `${environment}_${environmentConfig.releaseSequence || value.releaseSequence || 0}`,
         releaseSequence: environmentConfig.releaseSequence || value.releaseSequence || 0,
+        previousReleaseSequence: environmentConfig.previousReleaseSequence || 0,
+        previousVersionCode: environmentConfig.previousVersionCode || 0,
+        versionManagedByState: environmentConfig.hasPreviousRelease === true,
         confirmed: value.pipeline && value.pipeline.confirmed === true,
-        versionCode: value.gradle && value.gradle.versionCode || 0,
+        versionCode: environmentConfig.versionCode || configuredVersionCode,
         versionName: value.gradle && value.gradle.versionName || '',
         environmentConfig: {
             appName: environmentConfig.appName || '',
@@ -76,6 +87,7 @@ function summarizeConfig(projectRoot) {
             stateFile: value.pipeline && value.pipeline.stateFile || '',
             reportRoot: value.pipeline && value.pipeline.reportRoot || '',
             artifactRoot: value.pipeline && value.pipeline.artifactRoot || '',
+            archiveRoot: value.pipeline && value.pipeline.archiveRoot || '',
             runChecks: !value.pipeline || value.pipeline.runChecks !== false,
         },
     };
@@ -134,6 +146,7 @@ function saveConfig(projectRoot, patch) {
         stateFile: requiredText(patch.pipeline.stateFile, 'stateFile'),
         reportRoot: requiredText(patch.pipeline.reportRoot, 'reportRoot'),
         artifactRoot: requiredText(patch.pipeline.artifactRoot, 'artifactRoot'),
+        archiveRoot: requiredText(patch.pipeline.archiveRoot, 'archiveRoot'),
     };
     for (const bundle of value.bundles || []) {
         const next = patch.bundles && patch.bundles[bundle.bundleName];
@@ -153,6 +166,39 @@ function positiveInteger(value, label) {
     const number = Number(value);
     if (!Number.isSafeInteger(number) || number <= 0) throw new Error(`${label} must be a positive integer`);
     return number;
+}
+
+function positiveIntegerOrDefault(value, fallback) {
+    const number = Number(value);
+    return Number.isSafeInteger(number) && number > 0 ? number : fallback;
+}
+
+function nextReleaseSequence(previous, configured) {
+    const previousSequence = Number(previous && previous.releaseSequence);
+    return Number.isSafeInteger(previousSequence) && previousSequence > 0
+        ? previousSequence + 1
+        : positiveIntegerOrDefault(configured, 100000001);
+}
+
+function nextVersionCode(previous, configured) {
+    const previousVersionCode = Number(previous && previous.apk && previous.apk.versionCode);
+    return Number.isSafeInteger(previousVersionCode) && previousVersionCode > 0
+        ? previousVersionCode + 1
+        : positiveIntegerOrDefault(configured, 1);
+}
+
+function resolveConfiguredPath(projectRoot, value) {
+    const configured = String(value || '').trim();
+    if (!configured) return '';
+    if (configured.startsWith('project://')) return path.resolve(projectRoot, configured.slice('project://'.length));
+    return path.isAbsolute(configured) ? path.normalize(configured) : path.resolve(projectRoot, configured);
+}
+
+function readReleaseState(file) {
+    if (!file || !fs.existsSync(file)) return { schemaVersion: 1, environments: {} };
+    const value = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+    value.environments = value.environments || {};
+    return value;
 }
 
 function requiredText(value, label) {
