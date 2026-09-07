@@ -1,15 +1,15 @@
 {
   "package_version": 2,
   "name": "native-hot-update-toolkit",
-  "version": "0.6.2",
-  "title": "Android 热更新中心",
-  "description": "Android base/login/hall 命令行与可视化发布、配置和 manifest 检查中心。",
+  "version": "0.9.0",
+  "title": "Android Bundle 发布中心",
+  "description": "基础 APK、全部资源和可选 Bundle 独立构建、发布与 Manifest 检查中心。",
   "author": "Gala Client",
   "editor": ">=3.8.0",
   "main": "./main.js",
   "panels": {
     "default": {
-      "title": "Android 热更新中心",
+      "title": "Android Bundle 发布中心",
       "main": "./panel/index.js",
       "type": "dockable",
       "size": {
@@ -39,9 +39,8 @@
       "refresh-releases": { "methods": ["refreshReleases"] },
       "select-release": { "methods": ["selectRelease"] },
       "load-release-file": { "methods": ["loadReleaseFile"] },
-      "load-legacy-manifest": { "methods": ["loadLegacyManifest"] },
-      "save-legacy-manifest": { "methods": ["saveLegacyManifest"] },
       "open-path": { "methods": ["openPath"] },
+      "copy-publish-manifest": { "methods": ["copyPublishManifest"] },
       "state-updated": { "methods": ["default.updateState"] }
     }
   }

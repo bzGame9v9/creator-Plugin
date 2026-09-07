@@ -41,14 +41,21 @@ function summarizeConfig(projectRoot) {
         versionCode: nextVersionCode(releaseState.environments && releaseState.environments[name], configuredVersionCode),
         previousReleaseSequence: Number(releaseState.environments && releaseState.environments[name]?.releaseSequence) || 0,
         previousVersionCode: Number(releaseState.environments && releaseState.environments[name]?.apk?.versionCode) || 0,
-        hasPreviousRelease: !!(releaseState.environments && releaseState.environments[name]),
+        hasPreviousRelease: Number(releaseState.environments && releaseState.environments[name]?.releaseSequence) > 0,
         appName: item.appName || '',
         packageName: item.packageName || '',
         baseUrl: item.baseUrl || '',
         outputRoot: item.outputRoot || '',
+        apkInstallMode: item.apkInstallMode || (name === 'prod' ? 'google_play' : 'direct_apk'),
+        apkDownloadUrl: item.apkDownloadUrl || '',
+        apkUpdateDesc: item.apkUpdateDesc || '',
+        hotfixUpdateDesc: item.hotfixUpdateDesc || '',
+        hallBundle: item.hallBundle || value.componentRelease?.defaultHallBundle || 'hall',
     }]));
     const environmentConfig = environments[environment] || {};
     const bundles = Object.fromEntries((value.bundles || []).map(bundle => [bundle.bundleName, {
+        bundleName: bundle.bundleName,
+        assetRoot: bundle.assetRoot || '',
         requiredAtStartup: bundle.requiredAtStartup === true,
         includeInApk: bundle.includeInApk === true,
     }]));
@@ -68,6 +75,11 @@ function summarizeConfig(projectRoot) {
             packageName: environmentConfig.packageName || '',
             baseUrl: environmentConfig.baseUrl || '',
             outputRoot: environmentConfig.outputRoot || '',
+            apkInstallMode: environmentConfig.apkInstallMode || (environment === 'prod' ? 'google_play' : 'direct_apk'),
+            apkDownloadUrl: environmentConfig.apkDownloadUrl || '',
+            apkUpdateDesc: environmentConfig.apkUpdateDesc || '',
+            hotfixUpdateDesc: environmentConfig.hotfixUpdateDesc || '',
+            hallBundle: environmentConfig.hallBundle || value.componentRelease?.defaultHallBundle || 'hall',
         },
         environments,
         creator: {
@@ -83,11 +95,17 @@ function summarizeConfig(projectRoot) {
             privateKeyPath: value.signing && value.signing.privateKeyPath || '',
         },
         bundles,
+        componentRelease: {
+            enabled: !value.componentRelease || value.componentRelease.enabled !== false,
+            hallBundles: value.componentRelease?.hallBundles || ['hall'],
+            defaultHallBundle: value.componentRelease?.defaultHallBundle || 'hall',
+        },
         pipeline: {
             stateFile: value.pipeline && value.pipeline.stateFile || '',
             reportRoot: value.pipeline && value.pipeline.reportRoot || '',
             artifactRoot: value.pipeline && value.pipeline.artifactRoot || '',
             archiveRoot: value.pipeline && value.pipeline.archiveRoot || '',
+            hotfixMode: value.pipeline && value.pipeline.hotfixMode === 'full_zip' ? 'full_zip' : 'incremental',
             runChecks: !value.pipeline || value.pipeline.runChecks !== false,
         },
     };
@@ -110,13 +128,53 @@ function saveConfig(projectRoot, patch) {
     delete value.releaseId;
     delete value.releaseSequence;
     value.environments = value.environments || {};
+    const currentEnvironment = value.environments[environment] || {};
+    const appName = requiredText(patch.environmentConfig.appName, 'appName');
+    const packageName = requiredText(patch.environmentConfig.packageName, 'packageName');
+    const apkInstallMode = patch.environmentConfig.apkInstallMode === 'google_play'
+        ? 'google_play'
+        : (patch.environmentConfig.apkInstallMode === 'direct_apk'
+            ? 'direct_apk'
+            : (environment === 'prod' ? 'google_play' : 'direct_apk'));
+    const hallBundles = String(patch.componentRelease?.hallBundles || 'hall')
+        .split(',').map(item => item.trim()).filter(Boolean);
+    if (hallBundles.length === 0 || new Set(hallBundles).size !== hallBundles.length
+        || hallBundles.some(item => !/^[a-z][a-z0-9_-]*$/.test(item))) {
+        throw new Error('hallBundles must contain unique Bundle names');
+    }
+    const configuredBundles = new Set((value.bundles || []).map(bundle => bundle.bundleName));
+    const unknownHallBundle = hallBundles.find(item => !configuredBundles.has(item));
+    if (unknownHallBundle) throw new Error(`hall Bundle is not configured: ${unknownHallBundle}`);
+    const hallBundle = requiredText(patch.environmentConfig.hallBundle || hallBundles[0], 'hallBundle');
+    if (!hallBundles.includes(hallBundle)) throw new Error('hallBundle must be declared in hallBundles');
     value.environments[environment] = {
-        ...(value.environments[environment] || {}),
+        ...currentEnvironment,
         releaseSequence: sequence,
-        appName: requiredText(patch.environmentConfig.appName, 'appName'),
-        packageName: requiredText(patch.environmentConfig.packageName, 'packageName'),
+        appName,
+        packageName,
         baseUrl,
         outputRoot: requiredText(patch.environmentConfig.outputRoot, 'outputRoot'),
+        apkInstallMode,
+        apkDownloadUrl: requiredText(
+            patch.environmentConfig.apkDownloadUrl || currentEnvironment.apkDownloadUrl || (environment === 'prod'
+                ? `https://play.google.com/store/apps/details?id=${packageName}`
+                : `${baseUrl}apks/${appName}-{versionCode}-release.apk`),
+            'apkDownloadUrl',
+        ),
+        apkUpdateDesc: requiredText(
+            patch.environmentConfig.apkUpdateDesc || currentEnvironment.apkUpdateDesc || 'A new application version is required. Please update to continue.',
+            'apkUpdateDesc',
+        ),
+        hotfixUpdateDesc: requiredText(
+            patch.environmentConfig.hotfixUpdateDesc || currentEnvironment.hotfixUpdateDesc || 'Resources must be updated before continuing.',
+            'hotfixUpdateDesc',
+        ),
+        hallBundle,
+    };
+    value.componentRelease = {
+        enabled: patch.componentRelease?.enabled !== false,
+        hallBundles,
+        defaultHallBundle: hallBundle,
     };
     value.gradle = {
         ...(value.gradle || {}),
@@ -147,6 +205,7 @@ function saveConfig(projectRoot, patch) {
         reportRoot: requiredText(patch.pipeline.reportRoot, 'reportRoot'),
         artifactRoot: requiredText(patch.pipeline.artifactRoot, 'artifactRoot'),
         archiveRoot: requiredText(patch.pipeline.archiveRoot, 'archiveRoot'),
+        hotfixMode: patch.pipeline.hotfixMode === 'full_zip' ? 'full_zip' : 'incremental',
     };
     for (const bundle of value.bundles || []) {
         const next = patch.bundles && patch.bundles[bundle.bundleName];
