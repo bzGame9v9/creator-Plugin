@@ -12,9 +12,8 @@ const {
 const {
     RELEASE_FILES,
     listReleases,
-    loadLegacyManifest,
+    listReleaseFiles,
     loadReleaseFile,
-    saveLegacyManifest,
 } = require('./core/release-inspector');
 
 const PACKAGE_NAME = 'native-hot-update-toolkit';
@@ -41,8 +40,8 @@ function initialState() {
             releaseFiles: RELEASE_FILES,
             selectedRelease: null,
             selectedFile: null,
-            legacyManifest: null,
             completion: null,
+            publish: resolvePublishArtifacts(root, raw),
             logs: [],
             error: '',
         };
@@ -56,8 +55,8 @@ function initialState() {
             releaseFiles: RELEASE_FILES,
             selectedRelease: null,
             selectedFile: null,
-            legacyManifest: null,
             completion: null,
+            publish: null,
             logs: [],
             error: errorText(error),
         };
@@ -96,6 +95,7 @@ function refreshState() {
         projectRoot: root,
         config,
         releases: listReleases(root, raw),
+        publish: resolvePublishArtifacts(root, raw),
         error: '',
     });
 }
@@ -106,10 +106,13 @@ function createCliArgs(cliPath, configPath, mode, environment, input, skipCreato
     if (input.resume === true) args.push('--resume');
     if (input.skipChecks === true) args.push('--skip-checks');
     if (skipCreator) args.push('--skip-creator');
+    if ((mode === 'bundle' || mode === 'resources') && Array.isArray(input.selectedBundles) && input.selectedBundles.length) {
+        args.push('--bundles', input.selectedBundles.join(','));
+    }
     return args;
 }
 
-function createEditorBuildPlan(root, configPath, mode, environment) {
+function createEditorBuildPlan(root, configPath, mode, environment, selectedBundles = []) {
     const configModulePath = path.join(root, 'tools', 'android-release', 'lib', 'config.js');
     const creatorModulePath = path.join(root, 'tools', 'android-release', 'lib', 'creator-config.js');
     if (!fs.existsSync(configModulePath) || !fs.existsSync(creatorModulePath)) {
@@ -117,7 +120,7 @@ function createEditorBuildPlan(root, configPath, mode, environment) {
     }
     const { loadPipelineConfig } = require(configModulePath);
     const { createCreatorBuildConfig } = require(creatorModulePath);
-    const context = loadPipelineConfig(configPath, { mode, environment });
+    const context = loadPipelineConfig(configPath, { mode, environment, selectedBundles });
     const creatorLogPath = path.join(context.reportDir, 'creator-build.log');
     fs.mkdirSync(context.reportDir, { recursive: true });
     const buildOptions = createCreatorBuildConfig(context);
@@ -201,12 +204,14 @@ function appendCreatorLogFile(logPath) {
     }
 }
 
-async function runCreatorInCurrentEditor(root, configPath, mode, environment) {
+async function runCreatorInCurrentEditor(root, configPath, mode, environment, selectedBundles = []) {
     if (!global.Editor || !Editor.Message || typeof Editor.Message.request !== 'function') {
         throw new Error('当前 Creator 消息服务不可用，无法执行编辑器内构建');
     }
-    const plan = createEditorBuildPlan(root, configPath, mode, environment);
-    appendLog('Creator', '使用当前已打开的 Creator 执行 Android 资源构建，不再启动第二个 Creator 进程');
+    const plan = createEditorBuildPlan(root, configPath, mode, environment, selectedBundles);
+    appendLog('Creator', mode === 'bundle'
+        ? `使用 Creator 官方 Bundle 构建：${selectedBundles.join(', ')}`
+        : (mode === 'base-apk' ? '使用 Creator 官方构建生成基础 APK data' : '使用 Creator 官方构建生成全部资源'));
     appendLog('Creator配置', JSON.stringify(summarizeEditorBuild(plan), null, 2));
     setState({ status: 'Creator 资源构建中' });
     const restoreEnvironment = setBuildEnvironment(environment);
@@ -220,7 +225,7 @@ async function runCreatorInCurrentEditor(root, configPath, mode, environment) {
         restoreEnvironment();
     }
     appendCreatorLogFile(plan.creatorLogPath);
-    appendLog('Creator', 'Android 资源构建完成，继续生成热更发布文件');
+    appendLog('Creator', mode === 'base-apk' ? '基础 APK data 构建完成' : '资源构建完成，继续生成 Bundle 发布文件');
 }
 
 function runCli(root, args, environment) {
@@ -293,28 +298,64 @@ function readCompletion(root, mode, environment) {
     if (!completed) throw new Error(`构建完成，但状态文件中没有 ${environment} 环境结果：${stateFile}`);
 
     const apkPath = mode === 'base-apk' && completed.apk && completed.apk.path || '';
-    const versionDirectory = completed.releaseDir ? path.dirname(completed.releaseDir) : '';
     const archive = completed.archive || {};
+    const publishDirectory = completed.publishDirectory || {};
+    const componentRelease = mode !== 'base-apk' && completed.componentRelease || null;
     return {
         mode,
         environment,
-        title: mode === 'base-apk' ? '基础包打包已完成' : '热更包打包已完成',
+        title: mode === 'base-apk'
+            ? '基础 APK 打包已完成'
+            : (mode === 'bundle' ? '选中 Bundle 打包已完成' : '资源包打包已完成'),
         releaseId: completed.releaseId || '',
         apkPath,
         apkDirectory: apkPath ? path.dirname(apkPath) : '',
         hotUpdateRoot,
-        versionDirectory,
-        releaseDirectory: completed.releaseDir || '',
-        zipDirectory: completed.legacyCompatibility && completed.legacyCompatibility.root || '',
+        nativeUpdateFile: completed.backendConfig && completed.backendConfig.file || '',
+        releaseDirectory: componentRelease && path.dirname(componentRelease.releaseFile) || '',
         archiveHotfixDirectory: archive.hotfixDirectory || '',
         archiveApkPath: archive.apkPath || '',
+        componentReleaseFile: componentRelease && (archive.componentReleaseFile || componentRelease.releaseFile) || '',
+        changedComponents: componentRelease && componentRelease.changedComponents || [],
+        componentUploadPaths: componentRelease && publishDirectory.bundleDirectories || [],
+        publishDirectoryRoot: publishDirectory.root || '',
+    };
+}
+
+function resolvePublishArtifacts(root, raw) {
+    const environment = ['dev', 'test', 'prod'].includes(raw.environment) ? raw.environment : 'dev';
+    const stateFile = resolveConfiguredPath(root, raw.pipeline && raw.pipeline.stateFile);
+    if (!fs.existsSync(stateFile)) return null;
+    const releaseState = JSON.parse(fs.readFileSync(stateFile, 'utf8').replace(/^\uFEFF/, ''));
+    const current = releaseState.environments && releaseState.environments[environment];
+    const release = current && current.componentRelease;
+    if (!release || !release.releaseFile) return null;
+    const archive = current.archive || {};
+    const publishDirectory = current.publishDirectory || {};
+    const releaseId = path.basename(release.releaseFile, '.manifest');
+    const publishDirectoryRoot = publishDirectory.root || '';
+    const manifestFile = publishDirectory.root
+        ? (publishDirectory.manifestFile || '')
+        : (archive.componentReleaseFile || release.archiveReleaseFile || release.releaseFile);
+    const backendFile = archive.backendConfigFile || current.backendConfig && current.backendConfig.file || '';
+    return {
+        environment,
+        releaseId,
+        publishDirectoryRoot,
+        bundleDirectories: publishDirectory.bundleDirectories || [],
+        manifestFile,
+        backendFile,
+        backendJsonText: fs.existsSync(backendFile) ? fs.readFileSync(backendFile, 'utf8') : '',
     };
 }
 
 function appendCompletionLogs(completion) {
     appendLog('完成', completion.title);
     if (completion.apkPath) appendLog('完成', `基础 APK：${completion.apkPath}`);
-    if (completion.versionDirectory) appendLog('完成', `上传版本目录：${completion.versionDirectory}`);
+    if (completion.nativeUpdateFile) appendLog('完成', `后台更新配置：${completion.nativeUpdateFile}`);
+    if (completion.componentReleaseFile) appendLog('完成', `版本清单：${completion.componentReleaseFile}`);
+    if (completion.changedComponents?.length) appendLog('完成', `变化 Bundle：${completion.changedComponents.join(', ')}`);
+    completion.componentUploadPaths?.forEach(item => appendLog('上传', item));
     if (completion.archiveHotfixDirectory) appendLog('归档', `热更归档：${completion.archiveHotfixDirectory}`);
     if (completion.archiveApkPath) appendLog('归档', `APK 归档：${completion.archiveApkPath}`);
 }
@@ -325,7 +366,7 @@ async function runPipeline(input = {}) {
     const configPath = ensureLocalConfig(root);
     const cliPath = path.join(root, 'tools', 'android-release', 'cli.js');
     if (!fs.existsSync(cliPath)) throw new Error(`Android release CLI not found: ${cliPath}`);
-    const mode = ['validate', 'hot-update', 'base-apk'].includes(input.mode) ? input.mode : 'validate';
+    const mode = ['validate', 'base-apk', 'resources', 'bundle'].includes(input.mode) ? input.mode : 'validate';
     const environment = ['dev', 'test', 'prod'].includes(input.environment) ? input.environment : 'dev';
     const runCreatorHere = mode !== 'validate' && input.dryRun !== true
         && input.resume !== true && input.skipCreator !== true;
@@ -333,7 +374,7 @@ async function runPipeline(input = {}) {
     activeOperation = true;
     setState({ status: `执行 ${mode}`, busy: true, completion: null, logs: [], error: '' });
     try {
-        if (runCreatorHere) await runCreatorInCurrentEditor(root, configPath, mode, environment);
+        if (runCreatorHere) await runCreatorInCurrentEditor(root, configPath, mode, environment, input.selectedBundles || []);
         const args = createCliArgs(cliPath, configPath, mode, environment, input, runCreatorHere || input.skipCreator === true);
         setState({ status: runCreatorHere ? '生成发布文件' : `执行 ${mode}` });
         await runCli(root, args, environment);
@@ -371,11 +412,11 @@ function stopPipeline() {
     return setState({ status: '正在停止' });
 }
 
-function selectRelease(releaseDir) {
-    const release = (state && state.releases || []).find(item => item.releaseDir === releaseDir);
+function selectRelease(releaseFile) {
+    const release = (state && state.releases || []).find(item => item.releaseFile === releaseFile);
     if (!release) throw new Error('请选择列表中的 release');
-    const selectedFile = loadReleaseFile(release.releaseDir, 'release-descriptor.json');
-    return setState({ selectedRelease: release, selectedFile, error: '' });
+    const selectedFile = loadReleaseFile(release, 'version.manifest');
+    return setState({ selectedRelease: release, releaseFiles: listReleaseFiles(release), selectedFile, error: '' });
 }
 
 function resolveOpenDirectory(target) {
@@ -418,6 +459,28 @@ async function openSystemPath(target, dependencies = {}) {
         });
     });
     return directory;
+}
+
+function copyFileToClipboard(target) {
+    const file = path.resolve(String(target || ''));
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new Error(`文件不存在：${file}`);
+    if (process.platform !== 'win32') throw new Error('复制文件到剪贴板当前只支持 Windows');
+    const escaped = file.replace(/'/g, "''");
+    const script = [
+        'Add-Type -AssemblyName System.Windows.Forms',
+        '$files = New-Object System.Collections.Specialized.StringCollection',
+        `[void]$files.Add('${escaped}')`,
+        '[System.Windows.Forms.Clipboard]::SetFileDropList($files)',
+    ].join('; ');
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    return new Promise((resolve, reject) => {
+        const child = spawn('powershell.exe', ['-NoProfile', '-STA', '-EncodedCommand', encoded], {
+            windowsHide: true,
+            stdio: 'ignore',
+        });
+        child.once('error', reject);
+        child.once('close', code => code === 0 ? resolve(file) : reject(new Error(`复制 Manifest 文件失败，退出码 ${code}`)));
+    });
 }
 
 async function refreshAsset(url) {
@@ -472,19 +535,11 @@ exports.methods = {
     },
     selectRelease,
     loadReleaseFile(input) {
-        if (!input || !input.releaseDir) throw new Error('releaseDir is required');
-        const selectedFile = loadReleaseFile(input.releaseDir, input.relativePath);
+        if (!input || !input.releaseFile) throw new Error('releaseFile is required');
+        const release = (state && state.releases || []).find(item => item.releaseFile === input.releaseFile);
+        if (!release) throw new Error('请选择列表中的版本清单');
+        const selectedFile = loadReleaseFile(release, input.relativePath);
         return setState({ selectedFile, error: '' });
-    },
-    loadLegacyManifest(name) {
-        const legacyManifest = loadLegacyManifest(projectRoot(), name);
-        return setState({ legacyManifest, error: '' });
-    },
-    async saveLegacyManifest(input) {
-        if (!input) throw new Error('Manifest input is required');
-        const legacyManifest = saveLegacyManifest(projectRoot(), input.name, input.text);
-        await refreshAsset(`db://assets/resources/hot_update/${input.name}`);
-        return setState({ legacyManifest, status: '兼容 Manifest 已保存', error: '' });
     },
     async openPath(target) {
         try {
@@ -496,12 +551,20 @@ exports.methods = {
             throw error;
         }
     },
+    async copyPublishManifest() {
+        const publish = state && state.publish;
+        if (!publish || !publish.manifestFile) throw new Error('当前没有可复制的版本 Manifest');
+        const file = await copyFileToClipboard(publish.manifestFile);
+        appendLog('发布', `版本 Manifest 已复制到剪贴板：${file}`);
+        return setState({ status: '版本 Manifest 已复制', error: '' });
+    },
 };
 
 exports.__test__ = {
     extractCliFailure,
     friendlyBuildError,
     openSystemPath,
+    copyFileToClipboard,
     readCompletion,
     resolveConfiguredPath,
     resolveOpenDirectory,

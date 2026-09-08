@@ -3,12 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const RELEASE_FILES = [
-    'release-descriptor.json',
-    'release-report.json',
-    'project.json',
-];
-const LEGACY_MANIFESTS = new Set(['project.manifest', 'version.manifest']);
+const RELEASE_FILES = ['version.manifest', 'backend-config.json'];
+const LEGACY_MANIFESTS = new Set();
 
 function resolveProjectPath(projectRoot, value) {
     const text = String(value || '').replace(/\\/g, '/');
@@ -19,128 +15,76 @@ function resolveProjectPath(projectRoot, value) {
 
 function listReleases(projectRoot, config) {
     const output = [];
+    const archiveRoot = resolveProjectPath(projectRoot, config.pipeline && config.pipeline.archiveRoot);
     for (const [environment, environmentConfig] of Object.entries(config.environments || {})) {
-        const outputRoot = resolveProjectPath(projectRoot, environmentConfig.outputRoot);
-        if (!fs.existsSync(outputRoot)) continue;
-        for (const entry of fs.readdirSync(outputRoot, { withFileTypes: true })) {
-            if (!entry.isDirectory()) continue;
-            const releaseDir = path.join(outputRoot, entry.name, 'releases');
-            const descriptorPath = path.join(releaseDir, 'release-descriptor.json');
-            if (!fs.existsSync(descriptorPath)) continue;
+        const hotfixRoot = path.join(archiveRoot, 'hotfix', environment);
+        if (!fs.existsSync(hotfixRoot)) continue;
+        for (const entry of fs.readdirSync(hotfixRoot, { withFileTypes: true })) {
+            if (!entry.isFile() || !/^.+_\d+\.manifest$/.test(entry.name)) continue;
+            const releaseFile = path.join(hotfixRoot, entry.name);
             try {
-                const descriptor = readJson(descriptorPath);
-                output.push(createReleaseSummary(environment, entry.name, releaseDir, descriptor, descriptorPath));
+                const manifest = readJson(releaseFile);
+                const releaseId = path.basename(entry.name, '.manifest');
+                output.push({
+                    environment,
+                    releaseId,
+                    releaseSequence: Number(manifest.version) || 0,
+                    releaseDir: hotfixRoot,
+                    archiveRoot,
+                    backendFile: path.join(archiveRoot, 'backend-config', environment, `${releaseId}.json`),
+                    releaseFile,
+                    bundles: { ...(manifest.bundle || {}) },
+                    time: fs.statSync(releaseFile).mtimeMs,
+                });
             } catch (error) {
-                output.push({ environment, releaseId: entry.name, releaseDir, error: String(error), bundles: [], time: 0 });
-            }
-        }
-
-        // 兼容查看改造前的历史制品；新构建只写入 <releaseId>/releases。
-        const oldReleaseRoot = path.join(outputRoot, 'releases');
-        if (!fs.existsSync(oldReleaseRoot)) continue;
-        for (const entry of fs.readdirSync(oldReleaseRoot, { withFileTypes: true })) {
-            if (!entry.isDirectory()) continue;
-            const releaseDir = path.join(oldReleaseRoot, entry.name);
-            const descriptorPath = path.join(releaseDir, 'release-descriptor.json');
-            if (!fs.existsSync(descriptorPath)) continue;
-            try {
-                const descriptor = readJson(descriptorPath);
-                output.push(createReleaseSummary(environment, entry.name, releaseDir, descriptor, descriptorPath));
-            } catch (error) {
-                output.push({ environment, releaseId: entry.name, releaseDir, error: String(error), bundles: [], time: 0 });
+                output.push({ environment, releaseId: entry.name, releaseDir: hotfixRoot, archiveRoot, releaseFile, error: String(error), bundles: {}, time: 0 });
             }
         }
     }
     return output.sort((left, right) => right.time - left.time);
 }
 
-function createReleaseSummary(environment, fallbackReleaseId, releaseDir, descriptor, descriptorPath) {
-    return {
-        environment,
-        releaseId: descriptor.releaseId || fallbackReleaseId,
-        releaseSequence: descriptor.releaseSequence || 0,
-        releaseDir,
-        signed: !!(descriptor.integrity && descriptor.integrity.signature),
-        contentHash: descriptor.contentHash || '',
-        bundles: [],
-        time: fs.statSync(descriptorPath).mtimeMs,
-    };
+function listReleaseFiles(release) {
+    if (!release) return RELEASE_FILES;
+    return [
+        ...RELEASE_FILES,
+        ...Object.keys(release.bundles || {}).sort().flatMap(bundle => [
+            `${bundle}/project.manifest`,
+            `${bundle}/descriptor.json`,
+        ]),
+    ];
 }
 
-function loadReleaseFile(releaseDir, relativePath) {
-    if (!RELEASE_FILES.includes(relativePath)) throw new Error(`Unsupported release file: ${relativePath}`);
-    const root = path.resolve(releaseDir);
-    const target = path.resolve(root, relativePath);
-    const relative = path.relative(root, target);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Release file escapes release root');
-    if (!fs.existsSync(target)) throw new Error(`Release file not found: ${target}`);
-    const value = readJson(target);
+function loadReleaseFile(release, relativePath) {
+    if (!release || !release.releaseFile) throw new Error('Release selection is required');
+    const supported = listReleaseFiles(release);
+    if (!supported.includes(relativePath)) throw new Error(`Unsupported release file: ${relativePath}`);
+    let target;
+    if (relativePath === 'version.manifest') {
+        target = release.releaseFile;
+    } else if (relativePath === 'backend-config.json') {
+        target = release.backendFile;
+    } else {
+        const match = relativePath.match(/^([^/]+)\/(project\.manifest|descriptor\.json)$/);
+        const bundle = match && match[1];
+        const fileName = match && match[2];
+        const hash = bundle && release.bundles[bundle];
+        if (!hash) throw new Error(`Bundle is not declared by version manifest: ${bundle || ''}`);
+        target = path.join(release.releaseDir, bundle, hash, fileName);
+    }
+    const root = path.resolve(relativePath === 'backend-config.json' ? release.archiveRoot : release.releaseDir);
+    const absolute = path.resolve(target);
+    const relative = path.relative(root, absolute);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Release file escapes output root');
+    if (!fs.existsSync(absolute)) throw new Error(`Release file not found: ${absolute}`);
+    const value = readJson(absolute);
     return {
         releaseDir: root,
         relativePath,
+        file: absolute,
         value,
         text: `${JSON.stringify(value, null, 2)}\n`,
     };
-}
-
-function legacyManifestPath(projectRoot, name) {
-    if (!LEGACY_MANIFESTS.has(name)) throw new Error(`Unsupported legacy manifest: ${name}`);
-    return path.join(projectRoot, 'assets', 'resources', 'hot_update', name);
-}
-
-function loadLegacyManifest(projectRoot, name) {
-    const file = legacyManifestPath(projectRoot, name);
-    if (!fs.existsSync(file)) throw new Error(`Legacy manifest not found: ${file}`);
-    const value = readJson(file);
-    return {
-        name,
-        file,
-        value,
-        summary: summarizeLegacyManifest(name, value),
-        text: `${JSON.stringify(value, null, 2)}\n`,
-    };
-}
-
-function saveLegacyManifest(projectRoot, name, text) {
-    const file = legacyManifestPath(projectRoot, name);
-    const value = JSON.parse(String(text || '').replace(/^\uFEFF/, ''));
-    validateLegacyManifest(name, value);
-    const backupRoot = path.join(projectRoot, '.dev', 'hot-update-plugin-backups');
-    fs.mkdirSync(backupRoot, { recursive: true });
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backup = path.join(backupRoot, `${name}.${stamp}.json`);
-    if (fs.existsSync(file)) fs.copyFileSync(file, backup);
-    fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-    return { ...loadLegacyManifest(projectRoot, name), backup };
-}
-
-function validateLegacyManifest(name, value) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${name} must be a JSON object`);
-    for (const key of ['packageUrl', 'remoteManifestUrl', 'remoteVersionUrl', 'version']) {
-        if (!String(value[key] || '').trim()) throw new Error(`${name} is missing ${key}`);
-    }
-    if (name === 'project.manifest') {
-        if (!value.assets || typeof value.assets !== 'object' || Array.isArray(value.assets)) {
-            throw new Error('project.manifest assets must be a JSON object');
-        }
-        if (!Array.isArray(value.searchPaths)) {
-            throw new Error('project.manifest searchPaths must be a JSON array');
-        }
-    }
-}
-
-function summarizeLegacyManifest(name, value) {
-    const summary = {
-        version: String(value.version || ''),
-        packageUrl: String(value.packageUrl || ''),
-        remoteManifestUrl: String(value.remoteManifestUrl || ''),
-        remoteVersionUrl: String(value.remoteVersionUrl || ''),
-    };
-    if (name === 'project.manifest') {
-        summary.assetCount = Object.keys(value.assets || {}).length;
-        summary.searchPathCount = Array.isArray(value.searchPaths) ? value.searchPaths.length : 0;
-    }
-    return summary;
 }
 
 function readJson(file) {
@@ -151,8 +95,6 @@ module.exports = {
     LEGACY_MANIFESTS,
     RELEASE_FILES,
     listReleases,
-    loadLegacyManifest,
+    listReleaseFiles,
     loadReleaseFile,
-    saveLegacyManifest,
-    summarizeLegacyManifest,
 };

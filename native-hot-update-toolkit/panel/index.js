@@ -9,16 +9,16 @@ let formDirty = false;
 exports.template = [
   '<div class="shell">',
   '  <header class="topbar">',
-  '    <div class="identity"><h1>Android 热更新中心</h1><span id="status" class="status">就绪</span></div>',
+  '    <div class="identity"><h1>Android Bundle 发布中心</h1><span id="status" class="status">就绪</span></div>',
   '    <label class="environment">运行环境<select id="environment"><option value="dev">开发（dev）</option><option value="test">测试（test）</option><option value="prod">正式（prod）</option></select></label>',
   '    <div class="top-actions"><ui-button id="saveConfig" class="primary">保存配置</ui-button><ui-button id="refresh">刷新</ui-button><ui-button id="stop" disabled>停止</ui-button></div>',
   '  </header>',
   '  <nav id="tabs" class="tabs">',
-  '    <button class="tab active" data-tab="common">公共配置</button>',
-  '    <button class="tab" data-tab="base">基础包 APK</button>',
-  '    <button class="tab" data-tab="hot">热更包</button>',
-  '    <button class="tab" data-tab="release">发布清单</button>',
-  '    <button class="tab" data-tab="legacy">兼容清单</button>',
+  '    <button class="tab active" data-tab="common">基础配置</button>',
+  '    <button class="tab" data-tab="base">APK 打包</button>',
+  '    <button class="tab" data-tab="resources">资源打包</button>',
+  '    <button class="tab" data-tab="bundle">Bundle 打包</button>',
+  '    <button class="tab" data-tab="publish">发布帮助</button>',
   '  </nav>',
   '  <main id="pages">',
   '    <section id="common" class="page active">',
@@ -60,48 +60,60 @@ exports.template = [
   '        <label>首次/重置 APK versionCode（正常构建自动 +1）<input id="versionCode" type="number" min="1" step="1"></label>',
   '        <label>应用显示版本（versionName）<input id="versionName" type="text"></label>',
   '      </div>',
-  '      <div class="section-title">资源包内置策略</div>',
-  '      <div class="bundle-policy">',
-  '        <div class="bundle-head">资源包（Bundle）</div><div class="bundle-head">放入 APK</div>',
-  '        <div>login</div><input id="loginInApk" type="checkbox">',
-  '        <div>hall</div><input id="hallInApk" type="checkbox">',
+  '      <div class="section-title">后台 APK 强更配置</div>',
+  '      <div class="form-grid">',
+  '        <label>安装方式<select id="apkInstallMode"><option value="direct_apk">直接下载 APK</option><option value="google_play">Google Play</option></select></label>',
+  '        <label class="span-2">APK 下载地址<input id="apkDownloadUrl" type="url"></label>',
+  '        <label class="span-2">APK 更新提示<input id="apkUpdateDesc" type="text"></label>',
   '      </div>',
+  '      <div class="section-title">打入 APK 的 Bundle</div>',
+  '      <div class="action-row compact"><ui-button id="selectAllApkBundles">全选完整包</ui-button><ui-button id="clearApkBundles">只保留 base</ui-button></div>',
+  '      <div id="apkBundleSelection" class="bundle-selection"></div>',
+  '      <div class="summary">base 固定内置；勾选的 Bundle 直接打入 APK，适合无需 CDN 的完整测试包。本页不生成资源版本。</div>',
   '      <div class="section-title">基础包执行选项</div>',
   '      <div class="run-options"><label><input id="baseSkipChecks" type="checkbox">跳过发布前检查</label><label><input id="baseSkipCreator" type="checkbox">复用已有 Creator data</label></div>',
   '      <div class="action-row"><ui-button id="baseApk" class="danger">生成基础 APK</ui-button><ui-button id="resume">恢复基础包</ui-button></div>',
   '    </section>',
-  '    <section id="hot" class="page">',
-  '      <div id="hotSummary" class="summary"></div>',
-  '      <div class="section-title">发布描述文件签名</div>',
+  '    <section id="resources" class="page">',
+  '      <div id="resourceSummary" class="summary"></div>',
+  '      <div class="section-title">资源版本配置</div>',
   '      <div class="form-grid">',
-  '        <label>签名密钥标识（keyId）<input id="keyId" type="text"></label>',
-  '        <label>私钥文件路径（privateKeyPath）<input id="privateKeyPath" type="text"></label>',
+  '        <label>资源交付方式<select id="hotfixMode"><option value="incremental">Bundle 内增量</option><option value="full_zip">变化 Bundle 完整 ZIP</option></select></label>',
+  '        <label>当前渠道大厅 Bundle<input id="hallBundle" type="text"></label>',
+  '        <label class="span-2">可选大厅 Bundle（逗号分隔）<input id="hallBundles" type="text"></label>',
+  '        <label class="span-2">资源更新提示<input id="hotfixUpdateDesc" type="text"></label>',
   '      </div>',
-  '      <div class="toggle-row"><label><input id="signingRequired" type="checkbox">要求发布描述文件签名</label></div>',
-  '      <div class="section-title">热更包执行选项</div>',
-  '      <div class="run-options"><label><input id="hotSkipChecks" type="checkbox">跳过发布前检查</label><label><input id="hotSkipCreator" type="checkbox">复用已有 Creator data</label></div>',
-  '      <div class="action-row"><ui-button id="hotUpdate" class="primary">生成热更包</ui-button></div>',
+  '      <div class="section-title">本次随 base 一起发布的 Bundle</div>',
+  '      <div class="summary">base 固定构建且不可取消；其它 Bundle 按需勾选。该模式会完整构建 Creator data，但只发布 base 和勾选项。</div>',
+  '      <div class="action-row compact"><ui-button id="selectAllResourceBundles">全选</ui-button><ui-button id="clearResourceBundles">清空其它 Bundle</ui-button></div>',
+  '      <div id="resourceBundleSelection" class="bundle-selection"></div>',
+  '      <div class="run-options"><label><input id="resourceSkipChecks" type="checkbox">跳过发布前检查</label><label><input id="resourceSkipCreator" type="checkbox">复用已有 Creator 输出</label></div>',
+  '      <div class="action-row"><ui-button id="buildResources" class="primary">生成资源包</ui-button></div>',
   '    </section>',
-  '    <section id="release" class="page">',
+  '    <section id="bundle" class="page">',
+  '      <div id="bundleSummary" class="summary"></div>',
+  '      <div class="section-title">选择 Creator Bundle</div>',
+  '      <div class="summary">此页不包含 base，使用 Creator 官方 Bundle-only；可单选或复选，耗时明显低于资源打包。</div>',
+  '      <div class="action-row compact"><ui-button id="selectAllBundles">全选</ui-button><ui-button id="clearBundles">清空</ui-button></div>',
+  '      <div id="bundleSelection" class="bundle-selection"></div>',
+  '      <div class="run-options"><label><input id="bundleSkipChecks" type="checkbox">跳过发布前检查</label><label><input id="bundleSkipCreator" type="checkbox">复用已有 Creator 输出</label></div>',
+  '      <div class="action-row"><ui-button id="buildSelectedBundles" class="primary">生成选中 Bundle</ui-button></div>',
+  '    </section>',
+  '    <section id="publish" class="page">',
+  '      <div class="section-title">固定发布流程</div>',
+  '      <div id="publishSummary" class="summary"></div>',
+  '      <div class="publish-step"><strong>第一步：上传本次新增制品</strong><span>打开完整 native_hotfix 发布目录，将其中本次生成的 apks、bundle 子目录内容按原层级上传。</span><ui-button id="openPublishDirectory">打开本次发布目录</ui-button></div>',
+  '      <div class="publish-step"><strong>第二步：上传版本 Manifest</strong><span>把当前 manifest 文件上传到 CDN 的 native_hotfix 根目录。</span><ui-button id="copyVersionManifest">复制 Manifest 文件</ui-button></div>',
+  '      <div class="publish-step"><strong>第三步：更新后台 JSON</strong><span>复制当前后台 JSON 内容，粘贴到 /api/set/get 对应环境。</span><ui-button id="copyBackendJson">复制后台 JSON</ui-button></div>',
+  '      <div class="section-title">版本与 Bundle Manifest</div>',
   '      <div class="release-toolbar">',
   '        <select id="releaseSelect"></select>',
   '        <select id="releaseFile"></select>',
-  '        <ui-button id="reloadReleases">刷新发布清单</ui-button>',
+  '        <ui-button id="reloadReleases">刷新清单</ui-button>',
   '        <ui-button id="openRelease">打开目录</ui-button>',
   '      </div>',
   '      <div id="releaseSummary" class="summary"></div>',
   '      <textarea id="releaseJson" class="json" readonly></textarea>',
-  '    </section>',
-  '    <section id="legacy" class="page">',
-  '      <div class="release-toolbar">',
-  '        <select id="legacyName"><option value="version.manifest">version.manifest</option><option value="project.manifest">project.manifest</option></select>',
-  '        <ui-button id="loadLegacy">重新读取</ui-button>',
-  '        <ui-button id="saveLegacy" class="danger">保存源清单</ui-button>',
-  '      </div>',
-  '      <div id="legacySummary" class="summary">尚未读取兼容清单。</div>',
-  '      <div id="legacyPath" class="path-line"></div>',
-  '      <div id="legacyBackup" class="summary"></div>',
-  '      <textarea id="legacyJson" class="json editable"></textarea>',
   '    </section>',
   '  </main>',
   '  <section id="completionResult" class="completion-result">',
@@ -135,6 +147,8 @@ exports.style = [
   '.section-title{margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.1);font-weight:600}.section-title:first-child{margin-top:0}',
   '.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}.form-grid label{display:flex;min-width:0;flex-direction:column;gap:5px;color:rgba(255,255,255,.72)}.span-2{grid-column:span 2}',
   '.bundle-table{display:grid;grid-template-columns:70px 130px 100px minmax(220px,1fr) 80px;gap:7px;align-items:center}.bundle-policy{display:grid;grid-template-columns:120px 120px;gap:8px;align-items:center}.bundle-table input[type=checkbox],.bundle-policy input[type=checkbox]{justify-self:center}.bundle-head{font-weight:600;color:rgba(255,255,255,.7)}',
+  '.bundle-selection{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 12px;margin:8px 0 12px}.bundle-choice{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035)}',
+  '.action-row.compact{margin-top:6px;padding-top:0;border-top:0}.publish-step{display:grid;grid-template-columns:minmax(220px,1fr) minmax(320px,2fr) auto;align-items:center;gap:12px;padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.1)}.publish-step span{color:rgba(255,255,255,.7)}',
   '.path-line{margin-top:12px;color:rgba(255,255,255,.55);font:12px/1.5 Consolas,"Courier New",monospace;overflow-wrap:anywhere}',
   '.release-toolbar select:first-child{min-width:330px}.release-toolbar select:nth-child(2){min-width:220px}.json{width:100%;min-height:390px;margin-top:12px;padding:11px;resize:vertical;font:12px/1.55 Consolas,"Courier New",monospace}.json[readonly]{color:#c8d5dc}.editable{border-color:rgba(224,177,76,.45)}',
   '.error{display:none;max-height:130px;overflow:auto;margin:0;padding:10px 16px;color:#ffabab;background:rgba(165,45,45,.18);white-space:pre-wrap}',
@@ -143,19 +157,20 @@ exports.style = [
 
 exports.$ = {
   status: '#status', environment: '#environment', saveConfig: '#saveConfig', refresh: '#refresh',
-  tabs: '#tabs', pages: '#pages', validate: '#validate', hotUpdate: '#hotUpdate', baseApk: '#baseApk', resume: '#resume', stop: '#stop',
-  baseSkipChecks: '#baseSkipChecks', baseSkipCreator: '#baseSkipCreator', hotSkipChecks: '#hotSkipChecks', hotSkipCreator: '#hotSkipCreator',
-  buildSummary: '#buildSummary', baseSummary: '#baseSummary', hotSummary: '#hotSummary', copyLogs: '#copyLogs', clearLogs: '#clearLogs', logs: '#logs',
+  tabs: '#tabs', pages: '#pages', validate: '#validate', buildResources: '#buildResources', buildSelectedBundles: '#buildSelectedBundles', baseApk: '#baseApk', resume: '#resume', stop: '#stop',
+  selectAllApkBundles: '#selectAllApkBundles', clearApkBundles: '#clearApkBundles', selectAllResourceBundles: '#selectAllResourceBundles', clearResourceBundles: '#clearResourceBundles', selectAllBundles: '#selectAllBundles', clearBundles: '#clearBundles',
+  baseSkipChecks: '#baseSkipChecks', baseSkipCreator: '#baseSkipCreator', resourceSkipChecks: '#resourceSkipChecks', resourceSkipCreator: '#resourceSkipCreator', bundleSkipChecks: '#bundleSkipChecks', bundleSkipCreator: '#bundleSkipCreator',
+  buildSummary: '#buildSummary', baseSummary: '#baseSummary', resourceSummary: '#resourceSummary', bundleSummary: '#bundleSummary', publishSummary: '#publishSummary', copyLogs: '#copyLogs', clearLogs: '#clearLogs', logs: '#logs',
   releaseSequence: '#releaseSequence', versionCode: '#versionCode', versionName: '#versionName',
   confirmed: '#confirmed', runChecks: '#runChecks', appName: '#appName', packageName: '#packageName',
   baseUrl: '#baseUrl', outputRoot: '#outputRoot', creatorExecutable: '#creatorExecutable', sdkPath: '#sdkPath',
-  ndkPath: '#ndkPath', javaHome: '#javaHome', appABIs: '#appABIs', keyId: '#keyId', privateKeyPath: '#privateKeyPath',
-  signingRequired: '#signingRequired', loginInApk: '#loginInApk', hallInApk: '#hallInApk',
+  apkInstallMode: '#apkInstallMode', apkDownloadUrl: '#apkDownloadUrl', apkUpdateDesc: '#apkUpdateDesc', hotfixUpdateDesc: '#hotfixUpdateDesc',
+  hallBundle: '#hallBundle', hallBundles: '#hallBundles', apkBundleSelection: '#apkBundleSelection', resourceBundleSelection: '#resourceBundleSelection', bundleSelection: '#bundleSelection',
+  ndkPath: '#ndkPath', javaHome: '#javaHome', appABIs: '#appABIs',
   stateFile: '#stateFile', reportRoot: '#reportRoot',
-  artifactRoot: '#artifactRoot', archiveRoot: '#archiveRoot', configPath: '#configPath', releaseSelect: '#releaseSelect', releaseFile: '#releaseFile',
-  reloadReleases: '#reloadReleases', openRelease: '#openRelease', releaseSummary: '#releaseSummary', releaseJson: '#releaseJson',
-  legacyName: '#legacyName', loadLegacy: '#loadLegacy', saveLegacy: '#saveLegacy', legacyPath: '#legacyPath',
-  legacySummary: '#legacySummary', legacyBackup: '#legacyBackup', legacyJson: '#legacyJson', error: '#error',
+  artifactRoot: '#artifactRoot', archiveRoot: '#archiveRoot', hotfixMode: '#hotfixMode', configPath: '#configPath', releaseSelect: '#releaseSelect', releaseFile: '#releaseFile',
+  reloadReleases: '#reloadReleases', openRelease: '#openRelease', releaseSummary: '#releaseSummary', releaseJson: '#releaseJson', error: '#error',
+  openPublishDirectory: '#openPublishDirectory', copyVersionManifest: '#copyVersionManifest', copyBackendJson: '#copyBackendJson',
   completionResult: '#completionResult', completionTitle: '#completionTitle', completionPaths: '#completionPaths',
   openApkResult: '#openApkResult', openHotUpdateResult: '#openHotUpdateResult'
 };
@@ -187,6 +202,11 @@ function loadEnvironmentFields(panel, config, environment) {
   setValue(panel, 'packageName', item.packageName);
   setValue(panel, 'baseUrl', item.baseUrl);
   setValue(panel, 'outputRoot', item.outputRoot);
+  setValue(panel, 'apkInstallMode', item.apkInstallMode || (environment === 'prod' ? 'google_play' : 'direct_apk'));
+  setValue(panel, 'apkDownloadUrl', item.apkDownloadUrl);
+  setValue(panel, 'apkUpdateDesc', item.apkUpdateDesc);
+  setValue(panel, 'hotfixUpdateDesc', item.hotfixUpdateDesc);
+  setValue(panel, 'hallBundle', item.hallBundle || 'hall');
 }
 
 function setVersionFieldsManaged(panel, managed) {
@@ -209,28 +229,44 @@ function renderConfig(panel, config) {
   setValue(panel, 'ndkPath', config.creator && config.creator.ndkPath);
   setValue(panel, 'javaHome', config.creator && config.creator.javaHome);
   setValue(panel, 'appABIs', config.creator && (config.creator.appABIs || []).join(','));
-  setValue(panel, 'keyId', config.signing && config.signing.keyId);
-  setValue(panel, 'privateKeyPath', config.signing && config.signing.privateKeyPath);
-  setChecked(panel, 'signingRequired', config.signing && config.signing.required);
-  ['login', 'hall'].forEach(function (name) {
-    const bundle = config.bundles && config.bundles[name] || {};
-    setChecked(panel, name + 'InApk', bundle.includeInApk);
-  });
+  renderConfiguredBundleChoices(panel, 'apkBundleSelection', config, function (bundle) { return bundle.includeInApk === true; });
+  renderConfiguredBundleChoices(panel, 'resourceBundleSelection', config, function () { return false; });
+  renderConfiguredBundleChoices(panel, 'bundleSelection', config, function () { return false; });
   setValue(panel, 'stateFile', config.pipeline && config.pipeline.stateFile);
   setValue(panel, 'reportRoot', config.pipeline && config.pipeline.reportRoot);
   setValue(panel, 'artifactRoot', config.pipeline && config.pipeline.artifactRoot);
   setValue(panel, 'archiveRoot', config.pipeline && config.pipeline.archiveRoot);
+  setValue(panel, 'hotfixMode', config.pipeline && config.pipeline.hotfixMode || 'incremental');
+  setValue(panel, 'hallBundles', config.componentRelease && (config.componentRelease.hallBundles || []).join(',') || 'hall');
   panel.$.configPath.textContent = config.file || '';
   formInitialized = true;
 }
 
+function renderConfiguredBundleChoices(panel, containerKey, config, checked) {
+  const bundles = Object.keys(config && config.bundles || {});
+  const container = panel.$[containerKey];
+  container.innerHTML = bundles.map(function (name) {
+    return '<label class="bundle-choice"><input type="checkbox" data-bundle="' + escapeHtml(name) + '">' + escapeHtml(name) + '</label>';
+  }).join('') || '<div class="summary">没有配置可构建的 Bundle。</div>';
+  Array.from(container.querySelectorAll('input[data-bundle]')).forEach(function (input) {
+    input.checked = checked(config.bundles[input.dataset.bundle] || {});
+    input.addEventListener('change', function () { formDirty = true; });
+  });
+}
+
+function selectedBundles(panel, containerKey) {
+  return Array.from(panel.$[containerKey].querySelectorAll('input[data-bundle]'))
+    .filter(function (input) { return input.checked; })
+    .map(function (input) { return input.dataset.bundle; });
+}
+
 function renderReleases(panel, state) {
   const releases = state.releases || [];
-  const selectedPath = state.selectedRelease && state.selectedRelease.releaseDir || panel.$.releaseSelect.value;
+  const selectedPath = state.selectedRelease && state.selectedRelease.releaseFile || panel.$.releaseSelect.value;
   panel.$.releaseSelect.innerHTML = releases.length
     ? releases.map(function (item) {
-      const selected = item.releaseDir === selectedPath ? ' selected' : '';
-      return '<option value="' + escapeHtml(item.releaseDir) + '"' + selected + '>' +
+      const selected = item.releaseFile === selectedPath ? ' selected' : '';
+      return '<option value="' + escapeHtml(item.releaseFile) + '"' + selected + '>' +
         escapeHtml(formatEnvironment(item.environment) + ' / ' + item.releaseSequence + ' / ' + item.releaseId) + '</option>';
     }).join('')
     : '<option value="">没有 release</option>';
@@ -244,8 +280,8 @@ function renderReleases(panel, state) {
       '环境：' + formatEnvironment(selected.environment),
       '发布标识（releaseId）：' + selected.releaseId,
       '发布序号（sequence）：' + selected.releaseSequence,
-      '签名：' + (selected.signed ? '是' : '否'),
-      '完整 data：' + String(selected.contentHash || '').slice(0, 24)
+      'Bundle 数量：' + Object.keys(selected.bundles || {}).length,
+      '版本清单：' + selected.releaseFile
     ].join('\n')
     : '尚未选择发布记录。';
   panel.$.releaseJson.value = state.selectedFile && state.selectedFile.text || '';
@@ -256,7 +292,8 @@ function renderState(panel) {
   panel.$.status.textContent = state.status || '就绪';
   panel.$.stop.disabled = !state.busy;
   panel.$.validate.disabled = !!state.busy;
-  panel.$.hotUpdate.disabled = !!state.busy;
+  panel.$.buildResources.disabled = !!state.busy;
+  panel.$.buildSelectedBundles.disabled = !!state.busy;
   panel.$.baseApk.disabled = !!state.busy;
   panel.$.resume.disabled = !!state.busy;
   const config = state.config;
@@ -274,21 +311,37 @@ function renderState(panel) {
       '环境：' + formatEnvironment(config.environment),
       '本次 APK：' + config.versionName + ' (' + config.versionCode + ')' +
         (config.previousVersionCode ? '，上次 ' + config.previousVersionCode : ''),
-      '内置资源包：' + (['login', 'hall'].filter(function (name) {
-        return config.bundles && config.bundles[name] && config.bundles[name].includeInApk;
-      }).join(', ') || '无'),
+      'APK 内容：base' + (Object.keys(config.bundles || {}).filter(function (name) {
+        return config.bundles[name].includeInApk;
+      }).map(function (name) { return ' + ' + name; }).join('')),
       '真实构建：' + (config.confirmed ? '已允许' : '已锁定')
     ].join('\n')
     : '配置不可用。';
-  panel.$.hotSummary.textContent = config
+  panel.$.resourceSummary.textContent = config
     ? [
       '环境：' + formatEnvironment(config.environment),
       '本次发布：' + config.releaseId + ' / ' + config.releaseSequence +
         (config.previousReleaseSequence ? '，上次 ' + config.previousReleaseSequence : ''),
-      '更新范围：完整 Native data',
-      '发布描述文件签名：' + (config.signing && config.signing.required ? '要求签名' : '可选')
+      '固定包含：base（完整 Creator 构建）',
+      '大厅分发：' + (config.environmentConfig && config.environmentConfig.hallBundle || 'hall'),
+      '可选大厅：' + (config.componentRelease && (config.componentRelease.hallBundles || []).join(', ') || 'hall'),
+      '当前交付：' + (config.pipeline && config.pipeline.hotfixMode === 'full_zip' ? '变化 Bundle 完整 ZIP' : 'Bundle 内逐文件增量')
     ].join('\n')
     : '配置不可用。';
+  panel.$.bundleSummary.textContent = config
+    ? [
+      '环境：' + formatEnvironment(config.environment),
+      '本次发布：' + config.releaseId + ' / ' + config.releaseSequence,
+      '构建策略：Creator 官方 Bundle-only，不构建 base，不执行 Gradle'
+    ].join('\n')
+    : '配置不可用。';
+  const publish = state.publish;
+  panel.$.publishSummary.textContent = publish
+    ? ['当前发布：' + publish.releaseId, '完整发布目录：' + publish.publishDirectoryRoot, '本次新增 Bundle：' + ((publish.bundleDirectories || []).join('\n') || '无'), '版本 Manifest：' + publish.manifestFile, '后台 JSON：' + publish.backendFile].join('\n')
+    : '还没有可发布的资源结果。';
+  panel.$.openPublishDirectory.disabled = !publish || !publish.publishDirectoryRoot || !!state.busy;
+  panel.$.copyVersionManifest.disabled = !publish || !publish.manifestFile || !!state.busy;
+  panel.$.copyBackendJson.disabled = !publish || !publish.backendJsonText || !!state.busy;
   panel.$.logs.value = formatLogText(state);
   panel.$.logs.scrollTop = panel.$.logs.scrollHeight;
   panel.$.error.textContent = state.error || '';
@@ -298,7 +351,11 @@ function renderState(panel) {
   panel.$.completionTitle.textContent = completion && completion.title || '';
   panel.$.completionPaths.textContent = completion ? [
     completion.apkPath ? '基础 APK：' + completion.apkPath : '',
-    completion.versionDirectory ? '上传版本目录：' + completion.versionDirectory : '',
+    completion.nativeUpdateFile ? '后台更新配置：' + completion.nativeUpdateFile : '',
+    completion.componentReleaseFile ? '版本清单：' + completion.componentReleaseFile : '',
+    completion.changedComponents && completion.changedComponents.length ? '变化 Bundle：' + completion.changedComponents.join(', ') : '',
+    completion.componentUploadPaths && completion.componentUploadPaths.length ? '最小上传：\n' + completion.componentUploadPaths.join('\n') : '',
+    completion.publishDirectoryRoot ? '本次完整发布目录：' + completion.publishDirectoryRoot : '',
     completion.archiveHotfixDirectory ? '热更归档：' + completion.archiveHotfixDirectory : '',
     completion.archiveApkPath ? 'APK 归档：' + completion.archiveApkPath : ''
   ].filter(Boolean).join('\n') : '';
@@ -306,26 +363,12 @@ function renderState(panel) {
   panel.$.openHotUpdateResult.style.display = completion && completion.hotUpdateRoot ? 'inline-flex' : 'none';
   renderConfig(panel, config);
   renderReleases(panel, state);
-  if (state.legacyManifest) {
-    const summary = state.legacyManifest.summary || {};
-    panel.$.legacyName.value = state.legacyManifest.name;
-    panel.$.legacyPath.textContent = state.legacyManifest.file || '';
-    panel.$.legacySummary.textContent = [
-      '版本：' + (summary.version || ''),
-      '资源下载地址（packageUrl）：' + (summary.packageUrl || ''),
-      '远程资源索引（remoteManifestUrl）：' + (summary.remoteManifestUrl || ''),
-      '远程版本索引（remoteVersionUrl）：' + (summary.remoteVersionUrl || ''),
-      state.legacyManifest.name === 'project.manifest' ? '资源数量：' + Number(summary.assetCount || 0) : '',
-      state.legacyManifest.name === 'project.manifest' ? '搜索路径数量：' + Number(summary.searchPathCount || 0) : ''
-    ].filter(Boolean).join('\n');
-    panel.$.legacyJson.value = state.legacyManifest.text || '';
-    panel.$.legacyBackup.textContent = state.legacyManifest.backup ? '备份：' + state.legacyManifest.backup : '';
-  }
 }
 
 function readForm(panel) {
   const environment = panel.$.environment.value;
   const currentBundles = currentState && currentState.config && currentState.config.bundles || {};
+  const apkBundles = new Set(selectedBundles(panel, 'apkBundleSelection'));
   return {
     environment: environment,
     releaseSequence: Number(panel.$.releaseSequence.value),
@@ -336,7 +379,16 @@ function readForm(panel) {
       appName: panel.$.appName.value,
       packageName: panel.$.packageName.value,
       baseUrl: panel.$.baseUrl.value,
-      outputRoot: panel.$.outputRoot.value
+      outputRoot: panel.$.outputRoot.value,
+      apkInstallMode: panel.$.apkInstallMode.value,
+      apkDownloadUrl: panel.$.apkDownloadUrl.value,
+      apkUpdateDesc: panel.$.apkUpdateDesc.value,
+      hotfixUpdateDesc: panel.$.hotfixUpdateDesc.value,
+      hallBundle: panel.$.hallBundle.value
+    },
+    componentRelease: {
+      enabled: true,
+      hallBundles: panel.$.hallBundles.value
     },
     creator: {
       executable: panel.$.creatorExecutable.value,
@@ -345,27 +397,20 @@ function readForm(panel) {
       javaHome: panel.$.javaHome.value,
       appABIs: panel.$.appABIs.value
     },
-    signing: {
-      required: panel.$.signingRequired.checked,
-      keyId: panel.$.keyId.value,
-      privateKeyPath: panel.$.privateKeyPath.value
-    },
-    bundles: {
-      login: {
-        requiredAtStartup: !!(currentBundles.login && currentBundles.login.requiredAtStartup),
-        includeInApk: panel.$.loginInApk.checked
-      },
-      hall: {
-        requiredAtStartup: !!(currentBundles.hall && currentBundles.hall.requiredAtStartup),
-        includeInApk: panel.$.hallInApk.checked
-      }
-    },
+    signing: Object.assign({}, currentState && currentState.config && currentState.config.signing || {}, { required: false }),
+    bundles: Object.fromEntries(Object.keys(currentBundles).map(function (name) {
+      return [name, {
+        requiredAtStartup: !!currentBundles[name].requiredAtStartup,
+        includeInApk: apkBundles.has(name)
+      }];
+    })),
     pipeline: {
       runChecks: panel.$.runChecks.checked,
       stateFile: panel.$.stateFile.value,
       reportRoot: panel.$.reportRoot.value,
       artifactRoot: panel.$.artifactRoot.value,
-      archiveRoot: panel.$.archiveRoot.value
+      archiveRoot: panel.$.archiveRoot.value,
+      hotfixMode: panel.$.hotfixMode.value
     }
   };
 }
@@ -458,10 +503,9 @@ exports.ready = async function ready() {
   });
   const configKeys = [
     'releaseSequence', 'versionCode', 'versionName', 'confirmed', 'runChecks',
-    'appName', 'packageName', 'baseUrl', 'outputRoot', 'creatorExecutable', 'sdkPath',
-    'ndkPath', 'javaHome', 'appABIs', 'keyId', 'privateKeyPath', 'signingRequired',
-    'loginInApk', 'hallInApk',
-    'stateFile', 'reportRoot', 'artifactRoot', 'archiveRoot'
+    'appName', 'packageName', 'baseUrl', 'outputRoot', 'apkInstallMode', 'apkDownloadUrl', 'apkUpdateDesc', 'hotfixUpdateDesc', 'hallBundle', 'hallBundles', 'creatorExecutable', 'sdkPath',
+    'ndkPath', 'javaHome', 'appABIs',
+    'stateFile', 'reportRoot', 'artifactRoot', 'archiveRoot', 'hotfixMode'
   ];
   configKeys.forEach(function (key) {
     panel.$[key].addEventListener('input', function () { formDirty = true; });
@@ -479,11 +523,59 @@ exports.ready = async function ready() {
     renderState(panel);
   });
   this.$.validate.addEventListener('confirm', function () { void runMode(panel, 'validate', { dryRun: true }); });
-  this.$.hotUpdate.addEventListener('confirm', function () {
-    void runMode(panel, 'hot-update', {}, {
-      skipChecks: panel.$.hotSkipChecks.checked,
-      skipCreator: panel.$.hotSkipCreator.checked
+  this.$.buildResources.addEventListener('confirm', function () {
+    void runMode(panel, 'resources', {
+      selectedBundles: ['base'].concat(selectedBundles(panel, 'resourceBundleSelection'))
+    }, {
+      skipChecks: panel.$.resourceSkipChecks.checked,
+      skipCreator: panel.$.resourceSkipCreator.checked
     });
+  });
+  this.$.buildSelectedBundles.addEventListener('confirm', function () {
+    const bundles = selectedBundles(panel, 'bundleSelection');
+    if (!bundles.length) {
+      if (currentState) currentState.error = '请至少勾选一个 Bundle。';
+      renderState(panel);
+      return;
+    }
+    void runMode(panel, 'bundle', { selectedBundles: bundles }, {
+      skipChecks: panel.$.bundleSkipChecks.checked,
+      skipCreator: panel.$.bundleSkipCreator.checked
+    });
+  });
+  this.$.selectAllBundles.addEventListener('confirm', function () {
+    Array.from(panel.$.bundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = true; });
+  });
+  this.$.clearBundles.addEventListener('confirm', function () {
+    Array.from(panel.$.bundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = false; });
+  });
+  this.$.selectAllApkBundles.addEventListener('confirm', function () {
+    Array.from(panel.$.apkBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = true; });
+    formDirty = true;
+  });
+  this.$.clearApkBundles.addEventListener('confirm', function () {
+    Array.from(panel.$.apkBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = false; });
+    formDirty = true;
+  });
+  this.$.selectAllResourceBundles.addEventListener('confirm', function () {
+    Array.from(panel.$.resourceBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = true; });
+  });
+  this.$.clearResourceBundles.addEventListener('confirm', function () {
+    Array.from(panel.$.resourceBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = false; });
+  });
+  this.$.selectAllResourceBundles.addEventListener('confirm', function () {
+    Array.from(panel.$.resourceBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = true; });
+  });
+  this.$.clearResourceBundles.addEventListener('confirm', function () {
+    Array.from(panel.$.resourceBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = false; });
+  });
+  this.$.selectAllApkBundles.addEventListener('confirm', function () {
+    Array.from(panel.$.apkBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = true; });
+    formDirty = true;
+  });
+  this.$.clearApkBundles.addEventListener('confirm', function () {
+    Array.from(panel.$.apkBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = false; });
+    formDirty = true;
   });
   this.$.baseApk.addEventListener('confirm', function () {
     void runMode(panel, 'base-apk', {}, {
@@ -522,6 +614,27 @@ exports.ready = async function ready() {
     const target = currentState && currentState.completion && currentState.completion.hotUpdateRoot;
     void openPath(panel, target);
   });
+  this.$.openPublishDirectory.addEventListener('confirm', function () {
+    void openPath(panel, currentState && currentState.publish && currentState.publish.publishDirectoryRoot);
+  });
+  this.$.copyVersionManifest.addEventListener('confirm', async function () {
+    try {
+      currentState = await Editor.Message.request(PACKAGE_NAME, 'copy-publish-manifest');
+    } catch (error) {
+      currentState = await Editor.Message.request(PACKAGE_NAME, 'get-state');
+      currentState.error = String(error && (error.message || error));
+    }
+    renderState(panel);
+  });
+  this.$.copyBackendJson.addEventListener('confirm', async function () {
+    try {
+      await copyText(currentState && currentState.publish && currentState.publish.backendJsonText || '');
+      panel.$.status.textContent = '后台 JSON 已复制';
+    } catch (error) {
+      if (currentState) currentState.error = String(error && (error.message || error));
+      renderState(panel);
+    }
+  });
   this.$.reloadReleases.addEventListener('confirm', async function () {
     currentState = await Editor.Message.request(PACKAGE_NAME, 'refresh-releases');
     renderState(panel);
@@ -535,7 +648,7 @@ exports.ready = async function ready() {
     const releaseDir = currentState && currentState.selectedRelease && currentState.selectedRelease.releaseDir;
     if (!releaseDir) return;
     currentState = await Editor.Message.request(PACKAGE_NAME, 'load-release-file', {
-      releaseDir: releaseDir,
+      releaseFile: currentState.selectedRelease.releaseFile,
       relativePath: panel.$.releaseFile.value
     });
     renderState(panel);
@@ -544,37 +657,9 @@ exports.ready = async function ready() {
     const releaseDir = currentState && currentState.selectedRelease && currentState.selectedRelease.releaseDir;
     void openPath(panel, releaseDir);
   });
-  this.$.loadLegacy.addEventListener('confirm', async function () {
-    currentState = await Editor.Message.request(PACKAGE_NAME, 'load-legacy-manifest', panel.$.legacyName.value);
-    renderState(panel);
-  });
-  this.$.legacyName.addEventListener('change', async function () {
-    currentState = await Editor.Message.request(PACKAGE_NAME, 'load-legacy-manifest', panel.$.legacyName.value);
-    renderState(panel);
-  });
-  this.$.saveLegacy.addEventListener('confirm', async function () {
-    try {
-      currentState = await Editor.Message.request(PACKAGE_NAME, 'save-legacy-manifest', {
-        name: panel.$.legacyName.value,
-        text: panel.$.legacyJson.value
-      });
-    } catch (error) {
-      currentState = await Editor.Message.request(PACKAGE_NAME, 'get-state');
-      currentState.error = String(error && (error.message || error));
-    }
-    renderState(panel);
-  });
   currentState = await Editor.Message.request(PACKAGE_NAME, 'get-state');
   renderState(this);
   await Editor.Message.request(PACKAGE_NAME, 'panel-ready');
-  if (!currentState.legacyManifest) {
-    try {
-      currentState = await Editor.Message.request(PACKAGE_NAME, 'load-legacy-manifest', 'version.manifest');
-      renderState(this);
-    } catch (error) {
-      // The panel remains usable when the legacy manifest is intentionally removed later.
-    }
-  }
 };
 
 exports.close = function close() {
