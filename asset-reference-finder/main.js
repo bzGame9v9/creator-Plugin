@@ -8,6 +8,7 @@ const {
     findReferences,
     pathToDbUrl,
 } = require('./lib/reference-finder');
+const { resolveProjectRoot } = require('../shared/project-runtime');
 
 const PACKAGE_NAME = 'asset-reference-finder';
 const TEXT_SELECT_ASSET = '\u8bf7\u5148\u5728\u8d44\u6e90\u7ba1\u7406\u5668\u4e2d\u9009\u4e2d\u4e00\u4e2a assets \u4e0b\u7684\u8d44\u6e90\u3002';
@@ -16,10 +17,7 @@ const TEXT_CLEAN_SELECT_PREFAB = '\u8bf7\u5148\u9009\u4e2d\u9700\u8981\u6e05\u74
 let lastResult = null;
 
 function getProjectRoot() {
-    if (global.Editor && Editor.Project && Editor.Project.path) {
-        return Editor.Project.path;
-    }
-    return process.cwd();
+    return resolveProjectRoot();
 }
 
 function log(message) {

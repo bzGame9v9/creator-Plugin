@@ -268,12 +268,10 @@ function requiredText(value, label) {
 
 function normalizeEnvironmentBaseUrl(projectRoot, value, environment) {
     const projectModule = path.join(projectRoot, 'tools', 'native-hot-update-toolkit', 'lib', 'paths.js');
-    const sourceModule = path.resolve(__dirname, '..', '..', 'lib', 'paths.js');
-    const modulePath = fs.existsSync(projectModule) ? projectModule : sourceModule;
-    if (!fs.existsSync(modulePath)) {
+    if (!fs.existsSync(projectModule)) {
         throw new Error(`Native hot-update toolkit core not found: ${projectModule}`);
     }
-    const { normalizeBaseUrl } = require(modulePath);
+    const { normalizeBaseUrl } = require(projectModule);
     return normalizeBaseUrl(value, { allowHttp: environment !== 'prod' });
 }
 

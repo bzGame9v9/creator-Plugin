@@ -2,11 +2,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const JavaScriptObfuscator = require('javascript-obfuscator');
 const { resolveProjectPath, relativePosix } = require('../context');
 const { atomicWriteFile } = require('../asset-fingerprint');
+const { requireProjectDependency } = require('../../../shared/project-runtime');
 
 async function run(context) {
+    const JavaScriptObfuscator = requireProjectDependency('javascript-obfuscator', context.projectRoot);
     const config = context.config.obfuscation || {};
     if (config.enabled === false) {
         return { skipped: true };

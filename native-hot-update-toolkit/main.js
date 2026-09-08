@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { resolveProjectRoot } = require('../shared/project-runtime');
 const {
     ensureLocalConfig,
     readConfig,
@@ -15,6 +16,7 @@ const {
     listReleaseFiles,
     loadReleaseFile,
 } = require('./core/release-inspector');
+const { WEB_RELEASES, inspectWebRelease, saveWebReleaseSettings } = require('./core/web-release-inspector');
 
 const PACKAGE_NAME = 'native-hot-update-toolkit';
 let activeChild = null;
@@ -23,7 +25,7 @@ let panelReady = false;
 let state = null;
 
 function projectRoot() {
-    return global.Editor && Editor.Project && Editor.Project.path || process.cwd();
+    return resolveProjectRoot();
 }
 
 function initialState() {
@@ -42,6 +44,7 @@ function initialState() {
             selectedFile: null,
             completion: null,
             publish: resolvePublishArtifacts(root, raw),
+            web: inspectWebRelease(root, config.environment || 'dev'),
             logs: [],
             error: '',
         };
@@ -57,6 +60,7 @@ function initialState() {
             selectedFile: null,
             completion: null,
             publish: null,
+            web: null,
             logs: [],
             error: errorText(error),
         };
@@ -96,6 +100,7 @@ function refreshState() {
         config,
         releases: listReleases(root, raw),
         publish: resolvePublishArtifacts(root, raw),
+        web: inspectWebRelease(root, config.environment || 'dev'),
         error: '',
     });
 }
@@ -322,6 +327,39 @@ function readCompletion(root, mode, environment) {
     };
 }
 
+function runNpmScript(root, script) {
+    appendLog('命令', `npm.cmd run ${script}`);
+    return new Promise((resolve, reject) => {
+        let outputTail = '';
+        activeChild = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', script], {
+            cwd: root,
+            env: { ...process.env },
+            shell: process.platform === 'win32',
+            windowsHide: true,
+        });
+        const collect = (type, chunk) => {
+            outputTail = `${outputTail}${String(chunk || '')}`.slice(-64000);
+            appendLog(type, chunk);
+        };
+        activeChild.stdout.on('data', chunk => collect('stdout', chunk));
+        activeChild.stderr.on('data', chunk => collect('stderr', chunk));
+        activeChild.on('error', error => {
+            activeChild = null;
+            reject(error);
+        });
+        activeChild.on('close', code => {
+            activeChild = null;
+            if (code === 0) {
+                resolve();
+                return;
+            }
+            const lines = outputTail.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            const detail = [...lines].reverse().find(line => /error|failed|cannot|not ok/i.test(line));
+            reject(new Error(detail || `Web release exited with code ${code}`));
+        });
+    });
+}
+
 function resolvePublishArtifacts(root, raw) {
     const environment = ['dev', 'test', 'prod'].includes(raw.environment) ? raw.environment : 'dev';
     const stateFile = resolveConfiguredPath(root, raw.pipeline && raw.pipeline.stateFile);
@@ -461,6 +499,65 @@ async function openSystemPath(target, dependencies = {}) {
     return directory;
 }
 
+async function runWebRelease(input = {}) {
+    if (activeOperation) throw new Error('已有发布任务正在执行');
+    const root = projectRoot();
+    const environment = String(input.environment || '');
+    const release = WEB_RELEASES[environment];
+    if (!release) throw new Error(`未知 Web 发布环境：${environment}`);
+    const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    if (!packageJson.scripts || !packageJson.scripts[release.script]) {
+        throw new Error(`当前项目未配置 npm 命令：${release.script}`);
+    }
+    const web = inspectWebRelease(root, environment);
+    setState({ web });
+    if (!web.valid) {
+        throw new Error(`Web 打包配置检查失败：${web.errors[0]}`);
+    }
+
+    activeOperation = true;
+    setState({ status: `${release.label} Web 打包中`, busy: true, completion: null, logs: [], error: '' });
+    try {
+        await runNpmScript(root, release.script);
+        const buildDirectory = path.join(root, 'build', release.outputName);
+        const zipPath = path.join(root, 'build', `${release.outputName}.zip`);
+        const completion = {
+            mode: 'web',
+            environment,
+            title: `${release.label} Web 打包已完成`,
+            webBuildDirectory: buildDirectory,
+            webZipPath: zipPath,
+        };
+        appendLog('完成', completion.title);
+        appendLog('完成', `Web 目录：${buildDirectory}`);
+        appendLog('完成', `Web ZIP：${zipPath}`);
+        return setState({ status: completion.title, busy: false, completion, error: '' });
+    } catch (error) {
+        setState({ status: 'Web 打包失败', busy: false, error: errorText(error) });
+        throw error;
+    } finally {
+        activeOperation = false;
+    }
+}
+
+function inspectCurrentWebRelease(environment) {
+    const root = projectRoot();
+    const web = inspectWebRelease(root, String(environment || 'dev'));
+    return setState({ web, error: web.valid ? '' : web.errors[0] });
+}
+
+function saveCurrentWebRelease(input = {}) {
+    const root = projectRoot();
+    const environment = String(input.environment || 'dev');
+    try {
+        const web = saveWebReleaseSettings(root, environment, input.settings || {});
+        return setState({ web, status: `${web.label} Web 配置已保存`, error: '' });
+    } catch (error) {
+        setState({ status: 'Web 配置保存失败', error: errorText(error) });
+        throw error;
+    }
+}
+
 function copyFileToClipboard(target) {
     const file = path.resolve(String(target || ''));
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new Error(`文件不存在：${file}`);
@@ -529,6 +626,9 @@ exports.methods = {
         return setState({ config, status: '配置已保存', error: '' });
     },
     runPipeline,
+    runWebRelease,
+    inspectCurrentWebRelease,
+    saveCurrentWebRelease,
     stopPipeline,
     refreshReleases() {
         return refreshState();

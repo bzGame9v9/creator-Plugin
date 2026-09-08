@@ -2,6 +2,7 @@
 
 const { createContext } = require('./lib/context');
 const { runPipeline } = require('./lib/pipeline');
+const { resolveProjectRoot } = require('../shared/project-runtime');
 
 const PACKAGE_NAME = 'release-pipeline';
 
@@ -29,7 +30,7 @@ exports.onAfterBuild = async function onAfterBuild(options, result) {
     }
 
     const taskNames = parseTaskNames(packageOptions.releasePipelineTasks || packageOptions.tasks);
-    const projectRoot = getProjectRoot();
+    const projectRoot = resolveProjectRoot('', options, result);
 
     const context = createContext({
         projectRoot,
@@ -41,13 +42,6 @@ exports.onAfterBuild = async function onAfterBuild(options, result) {
 
     await runPipeline(context);
 };
-
-function getProjectRoot() {
-    if (global.Editor && Editor.Project && Editor.Project.path) {
-        return Editor.Project.path;
-    }
-    return process.cwd();
-}
 
 function normalizePackageOptions(options) {
     const packages = options && options.packages ? options.packages : {};

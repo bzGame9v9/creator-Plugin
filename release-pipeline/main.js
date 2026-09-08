@@ -3,14 +3,12 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { resolveProjectRoot } = require('../shared/project-runtime');
 
 const PACKAGE_NAME = 'release-pipeline';
 
 function getProjectRoot() {
-    if (global.Editor && Editor.Project && Editor.Project.path) {
-        return Editor.Project.path;
-    }
-    return process.cwd();
+    return resolveProjectRoot();
 }
 
 function openPath(target) {

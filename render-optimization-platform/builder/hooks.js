@@ -3,14 +3,10 @@
 const path = require('path');
 const { scanProject } = require('../core/scanner');
 const { writeReport } = require('../core/report');
+const { resolveProjectRoot } = require('../../shared/project-runtime');
 
 const PACKAGE_NAME = 'render-optimization-platform';
 exports.throwError = false;
-
-function getProjectRoot() {
-    if (global.Editor && Editor.Project && Editor.Project.path) return Editor.Project.path;
-    return process.cwd();
-}
 
 function packageOptions(options) {
     const value = options && options.packages && options.packages[PACKAGE_NAME];
@@ -25,10 +21,11 @@ function packageOptions(options) {
     return value;
 }
 
-function buildOutputRoot(options, result) {
-    return options && (options.dest || options.outputName)
-        || result && (result.dest || result.outputPath)
-        || path.join(getProjectRoot(), 'build');
+function buildOutputRoot(projectRoot, options, result) {
+    const explicit = result && (result.dest || result.outputPath) || options && options.dest;
+    return explicit
+        ? path.resolve(explicit)
+        : path.join(projectRoot, 'build', options && options.outputName || '');
 }
 
 exports.load = async function load() {
@@ -46,8 +43,9 @@ exports.onAfterBuild = async function onAfterBuild(options, result) {
         return;
     }
     try {
-        const report = await scanProject(getProjectRoot());
-        const outputDirectory = path.join(path.resolve(buildOutputRoot(options, result)), 'render-optimization-report');
+        const projectRoot = resolveProjectRoot('', options, result);
+        const report = await scanProject(projectRoot);
+        const outputDirectory = path.join(buildOutputRoot(projectRoot, options, result), 'render-optimization-report');
         const paths = await writeReport(report, outputDirectory, {
             baseName: 'render-report',
             markdown: settings.markdown === true,

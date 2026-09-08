@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { resolveProjectRoot } = require('../shared/project-runtime');
 
 const PACKAGE_NAME = 'build-asset-resolver';
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -11,10 +12,7 @@ const BUILD_RESULT_LIMIT = 100;
 let lastResult = null;
 
 function getProjectRoot() {
-    if (global.Editor && Editor.Project && Editor.Project.path) {
-        return Editor.Project.path;
-    }
-    return process.cwd();
+    return resolveProjectRoot();
 }
 
 function log(message) {

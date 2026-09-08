@@ -6,13 +6,13 @@ const {
     restoreLastConversion: restoreSerializedConversion,
     scanProject,
 } = require('./core/serialized-converter');
+const { resolveProjectRoot } = require('../shared/project-runtime');
 
 const PACKAGE_NAME = 'multi-texture-batcher';
 let state = createState('idle');
 
 function projectRoot() {
-    if (global.Editor && Editor.Project && Editor.Project.path) return Editor.Project.path;
-    return process.cwd();
+    return resolveProjectRoot();
 }
 
 function createState(status, overrides = {}) {

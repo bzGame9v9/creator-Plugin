@@ -6,7 +6,7 @@ const { scanProject } = require('../core/scanner');
 const { writeReport } = require('../core/report');
 
 async function main() {
-    const projectRoot = path.resolve(process.argv[2] || path.join(__dirname, '..', '..', '..'));
+    const projectRoot = path.resolve(process.argv[2] || process.cwd());
     const outputDirectory = path.resolve(process.argv[3] || path.join(projectRoot, 'build', 'render-optimization-reports'));
     const report = await scanProject(projectRoot, {
         onProgress(progress) {

@@ -2,11 +2,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const AdmZip = require('adm-zip');
 const { resolveProjectPath } = require('../context');
 const { MANIFEST_FILE, canonicalZipPayloadSha256 } = require('../release-integrity');
+const { requireProjectDependency } = require('../../../shared/project-runtime');
 
 async function run(context) {
+    const AdmZip = requireProjectDependency('adm-zip', context.projectRoot);
     const config = context.config.zip || {};
     if (config.enabled === false) {
         return { skipped: true };
@@ -32,7 +33,7 @@ async function run(context) {
     if (!context.dryRun) {
         fs.mkdirSync(path.dirname(output), { recursive: true });
         const rootInZip = config.root || context.outputName;
-        writeBuildZip(context.buildRoot, rootInZip, output);
+        writeBuildZip(context.buildRoot, rootInZip, output, AdmZip);
         const finalZip = new AdmZip(output);
         zipSha256 = canonicalZipPayloadSha256(finalZip);
         updateManifestZipDigest(manifestPath, zipSha256);
@@ -41,7 +42,7 @@ async function run(context) {
         if (fingerprintTask && fingerprintTask.result.integrityManifest) {
             fingerprintTask.result.integrityManifest.zipSha256 = zipSha256;
         }
-        writeBuildZip(context.buildRoot, config.root || context.outputName, output);
+        writeBuildZip(context.buildRoot, config.root || context.outputName, output, AdmZip);
         const verifiedZip = new AdmZip(output);
         const verifiedDigest = canonicalZipPayloadSha256(verifiedZip);
         if (verifiedDigest !== zipSha256) {
@@ -59,7 +60,7 @@ async function run(context) {
     };
 }
 
-function writeBuildZip(buildRoot, rootInZip, output) {
+function writeBuildZip(buildRoot, rootInZip, output, AdmZip) {
     const zip = new AdmZip();
     zip.addLocalFolder(buildRoot, rootInZip);
     writeZipAtomically(zip, output);

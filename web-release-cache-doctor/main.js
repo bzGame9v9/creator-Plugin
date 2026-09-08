@@ -6,6 +6,7 @@ const { execFile } = require('child_process');
 const { diagnose, mergeBrowserReport } = require('./core/cache-doctor');
 const { writeReport } = require('./core/report');
 const { normalizeInputs, validateInputs } = require('./core/validation');
+const { resolveProjectRoot } = require('../shared/project-runtime');
 
 const PACKAGE_NAME = 'web-release-cache-doctor';
 const REPORT_DIRECTORY = 'build/cache-doctor-reports';
@@ -29,7 +30,7 @@ let panelReady = false;
 let startedAt = 0;
 
 function projectRoot() {
-    return global.Editor && Editor.Project && Editor.Project.path || process.cwd();
+    return resolveProjectRoot();
 }
 
 function reportDirectory() {
@@ -211,6 +212,7 @@ async function quickDiagnose(input = {}) {
     try {
         setState('读取 ZIP', { progress: { phase: '读取 ZIP', current: 0, total: 0, path: '' } });
         const report = await diagnose({
+            projectRoot: projectRoot(),
             zipPath: values.zipPath,
             publicUrl: values.publicUrl,
             originUrl: values.originUrl,

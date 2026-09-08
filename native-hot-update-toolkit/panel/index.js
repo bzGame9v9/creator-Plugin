@@ -3,16 +3,24 @@
 const PACKAGE_NAME = 'native-hot-update-toolkit';
 let currentState = null;
 let activeTab = 'common';
+let activeWorkspace = 'android';
 let formInitialized = false;
 let formDirty = false;
+let webFormEnvironment = '';
+let webFormDirty = false;
 
 exports.template = [
   '<div class="shell">',
   '  <header class="topbar">',
-  '    <div class="identity"><h1>Android Bundle 发布中心</h1><span id="status" class="status">就绪</span></div>',
+  '    <div class="identity"><h1>项目发布中心</h1><span id="status" class="status">就绪</span></div>',
   '    <label class="environment">运行环境<select id="environment"><option value="dev">开发（dev）</option><option value="test">测试（test）</option><option value="prod">正式（prod）</option></select></label>',
   '    <div class="top-actions"><ui-button id="saveConfig" class="primary">保存配置</ui-button><ui-button id="refresh">刷新</ui-button><ui-button id="stop" disabled>停止</ui-button></div>',
   '  </header>',
+  '  <nav id="workspaceTabs" class="workspace-tabs">',
+  '    <button class="workspace-tab active" data-workspace="android">Android Bundle 发布中心</button>',
+  '    <button class="workspace-tab" data-workspace="web">Web 打包</button>',
+  '  </nav>',
+  '  <div id="androidWorkspace" class="workspace android-workspace active">',
   '  <nav id="tabs" class="tabs">',
   '    <button class="tab active" data-tab="common">基础配置</button>',
   '    <button class="tab" data-tab="base">APK 打包</button>',
@@ -116,9 +124,34 @@ exports.template = [
   '      <textarea id="releaseJson" class="json" readonly></textarea>',
   '    </section>',
   '  </main>',
+  '  </div>',
+  '  <section id="webWorkspace" class="workspace web-workspace">',
+  '    <div class="section-title">关键 SDK 配置</div>',
+  '    <div id="webSummary" class="summary"></div>',
+  '    <div class="form-grid web-key-config">',
+  '      <label class="span-2">Google 登录 Client ID<input id="webGoogleClientId" type="text"></label>',
+  '      <label>LiveChat ID<input id="webLiveChatId" type="text" inputmode="numeric"></label>',
+  '      <label>Facebook App ID<input id="webFacebookAppId" type="text" inputmode="numeric"></label>',
+  '      <label class="span-2">当前环境 ThinkingData AppId<input id="webThinkingDataAppId" type="text"></label>',
+  '    </div>',
+  '    <div class="section-title">HTML Meta 配置</div>',
+  '    <div class="web-meta-scroll">',
+  '      <div class="form-grid">',
+  '        <label class="span-2">页面标题（title）<input id="webTitle" type="text"></label>',
+  '        <label class="span-2">页面描述（description）<textarea id="webDescription" rows="3"></textarea></label>',
+  '        <label class="span-2">分享标题（og:title）<input id="webOgTitle" type="text"></label>',
+  '        <label class="span-2">分享描述（og:description）<textarea id="webOgDescription" rows="3"></textarea></label>',
+  '        <label class="span-2">分享图片路径或 URL（og:image）<input id="webOgImage" type="text"></label>',
+  '        <label class="span-2">Twitter 标题<input id="webTwitterTitle" type="text"></label>',
+  '        <label class="span-2">Twitter 描述<textarea id="webTwitterDescription" rows="3"></textarea></label>',
+  '        <label class="span-2">Twitter 图片路径或 URL<input id="webTwitterImage" type="text"></label>',
+  '      </div>',
+  '    </div>',
+  '    <div class="action-row"><ui-button id="webSave">保存 Web 配置</ui-button><ui-button id="webBuild" class="primary">生成当前环境 Web 包</ui-button></div>',
+  '  </section>',
   '  <section id="completionResult" class="completion-result">',
   '    <div class="completion-content"><strong id="completionTitle"></strong><pre id="completionPaths"></pre></div>',
-  '    <div class="completion-actions"><ui-button id="openApkResult">打开 APK 目录</ui-button><ui-button id="openHotUpdateResult">打开热更目录</ui-button></div>',
+  '    <div class="completion-actions"><ui-button id="openApkResult">打开 APK 目录</ui-button><ui-button id="openHotUpdateResult">打开热更目录</ui-button><ui-button id="openWebResult">打开 Web 目录</ui-button></div>',
   '  </section>',
   '  <pre id="error" class="error"></pre>',
   '  <section class="execution-log">',
@@ -134,6 +167,8 @@ exports.style = [
   '.topbar{display:grid;grid-template-columns:minmax(220px,1fr) 180px auto;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.1)}',
   'h1{margin:0;font-size:17px;letter-spacing:0}.status{display:block;margin-top:3px;color:rgba(255,255,255,.62)}',
   '.environment{display:flex;align-items:center;gap:8px}.environment select{flex:1}.top-actions,.release-toolbar,.run-options,.toggle-row,.log-head,.action-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+  '.workspace-tabs{display:flex;gap:4px;padding:8px 12px 0;border-bottom:1px solid rgba(255,255,255,.1)}.workspace-tab{padding:10px 16px;border:1px solid rgba(255,255,255,.12);border-bottom:0;color:rgba(255,255,255,.68);background:rgba(255,255,255,.035);cursor:pointer}.workspace-tab.active{color:#fff;background:rgba(85,169,209,.2);border-color:rgba(85,169,209,.55)}',
+  '.workspace{display:none;min-width:0;min-height:0;flex:1}.workspace.active{display:flex}.android-workspace{flex-direction:column}.web-workspace{box-sizing:border-box;flex-direction:column;overflow:auto;padding:16px}.web-key-config{margin-top:12px}.web-meta-scroll{max-height:360px;overflow:auto;padding:2px 10px 10px 2px}.web-meta-scroll textarea{min-height:64px;padding:8px;resize:vertical}',
   '.tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid rgba(255,255,255,.1);flex-wrap:wrap}',
   '.tab{padding:10px 13px;border:0;border-bottom:2px solid transparent;color:rgba(255,255,255,.65);background:transparent;cursor:pointer}.tab.active{color:#fff;border-bottom-color:#55a9d1}',
   'main{min-width:0;min-height:0;flex:1;overflow:hidden}.page{display:none;height:100%;box-sizing:border-box;overflow:auto;padding:16px}.page.active{display:block}',
@@ -157,6 +192,7 @@ exports.style = [
 
 exports.$ = {
   status: '#status', environment: '#environment', saveConfig: '#saveConfig', refresh: '#refresh',
+  workspaceTabs: '#workspaceTabs', androidWorkspace: '#androidWorkspace', webWorkspace: '#webWorkspace',
   tabs: '#tabs', pages: '#pages', validate: '#validate', buildResources: '#buildResources', buildSelectedBundles: '#buildSelectedBundles', baseApk: '#baseApk', resume: '#resume', stop: '#stop',
   selectAllApkBundles: '#selectAllApkBundles', clearApkBundles: '#clearApkBundles', selectAllResourceBundles: '#selectAllResourceBundles', clearResourceBundles: '#clearResourceBundles', selectAllBundles: '#selectAllBundles', clearBundles: '#clearBundles',
   baseSkipChecks: '#baseSkipChecks', baseSkipCreator: '#baseSkipCreator', resourceSkipChecks: '#resourceSkipChecks', resourceSkipCreator: '#resourceSkipCreator', bundleSkipChecks: '#bundleSkipChecks', bundleSkipCreator: '#bundleSkipCreator',
@@ -171,8 +207,12 @@ exports.$ = {
   artifactRoot: '#artifactRoot', archiveRoot: '#archiveRoot', hotfixMode: '#hotfixMode', configPath: '#configPath', releaseSelect: '#releaseSelect', releaseFile: '#releaseFile',
   reloadReleases: '#reloadReleases', openRelease: '#openRelease', releaseSummary: '#releaseSummary', releaseJson: '#releaseJson', error: '#error',
   openPublishDirectory: '#openPublishDirectory', copyVersionManifest: '#copyVersionManifest', copyBackendJson: '#copyBackendJson',
+  webSummary: '#webSummary', webSave: '#webSave', webBuild: '#webBuild',
+  webGoogleClientId: '#webGoogleClientId', webLiveChatId: '#webLiveChatId', webFacebookAppId: '#webFacebookAppId', webThinkingDataAppId: '#webThinkingDataAppId',
+  webTitle: '#webTitle', webDescription: '#webDescription', webOgTitle: '#webOgTitle', webOgDescription: '#webOgDescription', webOgImage: '#webOgImage',
+  webTwitterTitle: '#webTwitterTitle', webTwitterDescription: '#webTwitterDescription', webTwitterImage: '#webTwitterImage',
   completionResult: '#completionResult', completionTitle: '#completionTitle', completionPaths: '#completionPaths',
-  openApkResult: '#openApkResult', openHotUpdateResult: '#openHotUpdateResult'
+  openApkResult: '#openApkResult', openHotUpdateResult: '#openHotUpdateResult', openWebResult: '#openWebResult'
 };
 
 function escapeHtml(value) {
@@ -287,6 +327,53 @@ function renderReleases(panel, state) {
   panel.$.releaseJson.value = state.selectedFile && state.selectedFile.text || '';
 }
 
+function renderWebRelease(panel, web) {
+  if (!web) {
+    panel.$.webSummary.textContent = 'Web 配置尚未读取。';
+    return;
+  }
+  if (!webFormDirty || webFormEnvironment !== web.environment) {
+    const settings = web.settings || {};
+    setValue(panel, 'webGoogleClientId', settings.googleClientId);
+    setValue(panel, 'webLiveChatId', settings.liveChatId);
+    setValue(panel, 'webFacebookAppId', settings.facebookAppId);
+    setValue(panel, 'webThinkingDataAppId', settings.thinkingDataAppId);
+    setValue(panel, 'webTitle', settings.title);
+    setValue(panel, 'webDescription', settings.description);
+    setValue(panel, 'webOgTitle', settings.ogTitle);
+    setValue(panel, 'webOgDescription', settings.ogDescription);
+    setValue(panel, 'webOgImage', settings.ogImage);
+    setValue(panel, 'webTwitterTitle', settings.twitterTitle);
+    setValue(panel, 'webTwitterDescription', settings.twitterDescription);
+    setValue(panel, 'webTwitterImage', settings.twitterImage);
+    webFormEnvironment = web.environment;
+    webFormDirty = false;
+  }
+  const firstError = web.errors && web.errors[0];
+  panel.$.webSummary.textContent = [
+    '当前环境：' + web.label,
+    '打包命令：' + web.command,
+    firstError ? '需要处理：' + firstError : '配置状态：可打包'
+  ].join('\n');
+}
+
+function readWebForm(panel) {
+  return {
+    googleClientId: panel.$.webGoogleClientId.value.trim(),
+    liveChatId: panel.$.webLiveChatId.value.trim(),
+    facebookAppId: panel.$.webFacebookAppId.value.trim(),
+    thinkingDataAppId: panel.$.webThinkingDataAppId.value.trim(),
+    title: panel.$.webTitle.value.trim(),
+    description: panel.$.webDescription.value.trim(),
+    ogTitle: panel.$.webOgTitle.value.trim(),
+    ogDescription: panel.$.webOgDescription.value.trim(),
+    ogImage: panel.$.webOgImage.value.trim(),
+    twitterTitle: panel.$.webTwitterTitle.value.trim(),
+    twitterDescription: panel.$.webTwitterDescription.value.trim(),
+    twitterImage: panel.$.webTwitterImage.value.trim()
+  };
+}
+
 function renderState(panel) {
   const state = currentState || {};
   panel.$.status.textContent = state.status || '就绪';
@@ -296,6 +383,8 @@ function renderState(panel) {
   panel.$.buildSelectedBundles.disabled = !!state.busy;
   panel.$.baseApk.disabled = !!state.busy;
   panel.$.resume.disabled = !!state.busy;
+  panel.$.webSave.disabled = !!state.busy;
+  panel.$.webBuild.disabled = !!state.busy;
   const config = state.config;
   panel.$.buildSummary.textContent = config
     ? [
@@ -361,6 +450,14 @@ function renderState(panel) {
   ].filter(Boolean).join('\n') : '';
   panel.$.openApkResult.style.display = completion && completion.apkDirectory ? 'inline-flex' : 'none';
   panel.$.openHotUpdateResult.style.display = completion && completion.hotUpdateRoot ? 'inline-flex' : 'none';
+  panel.$.openWebResult.style.display = completion && completion.webBuildDirectory ? 'inline-flex' : 'none';
+  if (completion && completion.webBuildDirectory) {
+    panel.$.completionPaths.textContent = [
+      'Web 目录：' + completion.webBuildDirectory,
+      'Web ZIP：' + completion.webZipPath
+    ].join('\n');
+  }
+  renderWebRelease(panel, state.web);
   renderConfig(panel, config);
   renderReleases(panel, state);
 }
@@ -479,6 +576,62 @@ async function runMode(panel, mode, extra, runOptions) {
   renderState(panel);
 }
 
+async function refreshWebRelease(panel) {
+  try {
+    currentState = await Editor.Message.request(
+      PACKAGE_NAME,
+      'inspect-web-release',
+      panel.$.environment.value
+    );
+  } catch (error) {
+    currentState = await Editor.Message.request(PACKAGE_NAME, 'get-state');
+    currentState.error = currentState.error || String(error && (error.message || error));
+  }
+  renderState(panel);
+}
+
+async function saveWebRelease(panel) {
+  try {
+    currentState = await Editor.Message.request(PACKAGE_NAME, 'save-web-release-config', {
+      environment: panel.$.environment.value,
+      settings: readWebForm(panel)
+    });
+    webFormDirty = false;
+    webFormEnvironment = panel.$.environment.value;
+    renderState(panel);
+    return true;
+  } catch (error) {
+    currentState = await Editor.Message.request(PACKAGE_NAME, 'get-state');
+    currentState.error = currentState.error || String(error && (error.message || error));
+    renderState(panel);
+    return false;
+  }
+}
+
+async function runWebRelease(panel) {
+  if (!await saveWebRelease(panel)) return;
+  try {
+    currentState = await Editor.Message.request(PACKAGE_NAME, 'run-web-release', {
+      environment: panel.$.environment.value
+    });
+  } catch (error) {
+    currentState = await Editor.Message.request(PACKAGE_NAME, 'get-state');
+    currentState.error = currentState.error || String(error && (error.message || error));
+  }
+  renderState(panel);
+}
+
+function switchWorkspace(panel, name) {
+  activeWorkspace = name === 'web' ? 'web' : 'android';
+  Array.from(panel.$.workspaceTabs.querySelectorAll('.workspace-tab')).forEach(function (tab) {
+    tab.classList.toggle('active', tab.dataset.workspace === activeWorkspace);
+  });
+  panel.$.androidWorkspace.classList.toggle('active', activeWorkspace === 'android');
+  panel.$.webWorkspace.classList.toggle('active', activeWorkspace === 'web');
+  panel.$.saveConfig.style.display = activeWorkspace === 'android' ? 'inline-flex' : 'none';
+  if (activeWorkspace === 'web') void refreshWebRelease(panel);
+}
+
 function switchTab(panel, name) {
   activeTab = name;
   Array.from(panel.$.tabs.querySelectorAll('.tab')).forEach(function (tab) {
@@ -498,6 +651,9 @@ exports.methods = {
 
 exports.ready = async function ready() {
   const panel = this;
+  Array.from(this.$.workspaceTabs.querySelectorAll('.workspace-tab')).forEach(function (tab) {
+    tab.addEventListener('click', function () { switchWorkspace(panel, tab.dataset.workspace); });
+  });
   Array.from(this.$.tabs.querySelectorAll('.tab')).forEach(function (tab) {
     tab.addEventListener('click', function () { switchTab(panel, tab.dataset.tab); });
   });
@@ -511,9 +667,23 @@ exports.ready = async function ready() {
     panel.$[key].addEventListener('input', function () { formDirty = true; });
     panel.$[key].addEventListener('change', function () { formDirty = true; });
   });
+  const webConfigKeys = [
+    'webGoogleClientId', 'webLiveChatId', 'webFacebookAppId', 'webThinkingDataAppId',
+    'webTitle', 'webDescription', 'webOgTitle', 'webOgDescription', 'webOgImage',
+    'webTwitterTitle', 'webTwitterDescription', 'webTwitterImage'
+  ];
+  webConfigKeys.forEach(function (key) {
+    panel.$[key].addEventListener('input', function () { webFormDirty = true; });
+    panel.$[key].addEventListener('change', function () { webFormDirty = true; });
+  });
   this.$.environment.addEventListener('change', function () {
     if (currentState && currentState.config) loadEnvironmentFields(panel, currentState.config, panel.$.environment.value);
     formDirty = true;
+    if (activeWorkspace === 'web') {
+      webFormDirty = false;
+      webFormEnvironment = '';
+      void refreshWebRelease(panel);
+    }
   });
   this.$.saveConfig.addEventListener('confirm', function () { void saveForm(panel); });
   this.$.refresh.addEventListener('confirm', async function () {
@@ -523,6 +693,8 @@ exports.ready = async function ready() {
     renderState(panel);
   });
   this.$.validate.addEventListener('confirm', function () { void runMode(panel, 'validate', { dryRun: true }); });
+  this.$.webSave.addEventListener('confirm', function () { void saveWebRelease(panel); });
+  this.$.webBuild.addEventListener('confirm', function () { void runWebRelease(panel); });
   this.$.buildResources.addEventListener('confirm', function () {
     void runMode(panel, 'resources', {
       selectedBundles: ['base'].concat(selectedBundles(panel, 'resourceBundleSelection'))
@@ -563,20 +735,6 @@ exports.ready = async function ready() {
   this.$.clearResourceBundles.addEventListener('confirm', function () {
     Array.from(panel.$.resourceBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = false; });
   });
-  this.$.selectAllResourceBundles.addEventListener('confirm', function () {
-    Array.from(panel.$.resourceBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = true; });
-  });
-  this.$.clearResourceBundles.addEventListener('confirm', function () {
-    Array.from(panel.$.resourceBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = false; });
-  });
-  this.$.selectAllApkBundles.addEventListener('confirm', function () {
-    Array.from(panel.$.apkBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = true; });
-    formDirty = true;
-  });
-  this.$.clearApkBundles.addEventListener('confirm', function () {
-    Array.from(panel.$.apkBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = false; });
-    formDirty = true;
-  });
   this.$.baseApk.addEventListener('confirm', function () {
     void runMode(panel, 'base-apk', {}, {
       skipChecks: panel.$.baseSkipChecks.checked,
@@ -612,6 +770,10 @@ exports.ready = async function ready() {
   });
   this.$.openHotUpdateResult.addEventListener('confirm', function () {
     const target = currentState && currentState.completion && currentState.completion.hotUpdateRoot;
+    void openPath(panel, target);
+  });
+  this.$.openWebResult.addEventListener('confirm', function () {
+    const target = currentState && currentState.completion && currentState.completion.webBuildDirectory;
     void openPath(panel, target);
   });
   this.$.openPublishDirectory.addEventListener('confirm', function () {
@@ -665,5 +827,8 @@ exports.ready = async function ready() {
 exports.close = function close() {
   formInitialized = false;
   formDirty = false;
+  webFormEnvironment = '';
+  webFormDirty = false;
   activeTab = 'common';
+  activeWorkspace = 'android';
 };

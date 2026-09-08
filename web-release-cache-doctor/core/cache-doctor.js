@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const AdmZip = require('adm-zip');
+const { requireProjectDependency } = require('../../shared/project-runtime');
 const {
     MANIFEST_FILE,
     calculateReleaseId,
@@ -14,12 +14,13 @@ const DEFAULT_TIMEOUT = 15000;
 const DEFAULT_CONCURRENCY = 4;
 
 async function diagnose(options, hooks = {}) {
+    const AdmZip = requireProjectDependency('adm-zip', options.projectRoot);
     const timeout = Number(options.timeout || DEFAULT_TIMEOUT);
     const concurrency = Math.max(1, Math.min(16, Number(options.concurrency || DEFAULT_CONCURRENCY)));
     const issues = [];
     const zipPath = path.resolve(options.zipPath || '');
     notifyStage(hooks, '读取 ZIP', `正在读取 ZIP：${zipPath}`);
-    const local = inspectZip(zipPath, issues);
+    const local = inspectZip(zipPath, issues, AdmZip);
     const publicBase = normalizeBaseUrl(options.publicUrl || options.url || '');
     const originBase = options.originUrl ? normalizeBaseUrl(options.originUrl) : null;
     const report = {
@@ -77,7 +78,7 @@ function mergeBrowserReport(report, browserReport) {
     return merged;
 }
 
-function inspectZip(zipPath, issues) {
+function inspectZip(zipPath, issues, AdmZip = requireProjectDependency('adm-zip')) {
     if (!zipPath || !fs.existsSync(zipPath)) {
         issues.push('zip_corrupt');
         issues.push('missing_file');

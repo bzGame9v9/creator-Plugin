@@ -5,6 +5,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { scanProject } = require('./core/scanner');
 const { writeReport } = require('./core/report');
+const { resolveProjectRoot } = require('../shared/project-runtime');
 
 const PACKAGE_NAME = 'render-optimization-platform';
 let activeSignal = null;
@@ -13,8 +14,7 @@ let lastPanelReport = null;
 let state = createState('idle');
 
 function getProjectRoot() {
-    if (global.Editor && Editor.Project && Editor.Project.path) return Editor.Project.path;
-    return process.cwd();
+    return resolveProjectRoot();
 }
 
 function createState(status, overrides = {}) {

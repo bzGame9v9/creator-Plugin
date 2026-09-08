@@ -3,12 +3,13 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveAppVersion, resolveReleaseEnvironment } = require('./release-identity');
+const { resolveProjectRoot } = require('../../shared/project-runtime');
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_CONFIG_PATH = path.join(PACKAGE_ROOT, 'config', 'default-config.json');
 
 function createContext(input) {
-    const projectRoot = path.resolve(input.projectRoot || process.cwd());
+    const projectRoot = resolveProjectRoot(input.projectRoot, input.options, input.result);
     const fileConfig = loadConfig(projectRoot, input.configPath);
     const config = mergeDeep(fileConfig, input.configOverrides || {});
     const options = input.options || {};
