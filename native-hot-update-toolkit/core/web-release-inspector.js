@@ -35,6 +35,7 @@ function inspectWebRelease(projectRoot, environment) {
     const templateFile = path.join(projectRoot, 'build-templates', 'web-mobile', 'index.ejs');
     const releaseToolFile = path.join(projectRoot, 'tools', 'release-web.js');
     const releaseConfigFile = path.resolve(__dirname, '..', '..', 'release-pipeline', 'config', 'default-config.json');
+    const shareImageFile = path.join(projectRoot, 'build-templates', 'web-mobile', 'invite.jpg');
 
     const packageJson = readJson(packageFile, 'package.json', errors);
     const profile = readJson(profileFile, 'Web profile', errors);
@@ -126,6 +127,40 @@ function inspectWebRelease(projectRoot, environment) {
             twitterDescription: metaValue(meta, 'twitter:description'),
             twitterImage: metaValue(meta, 'twitter:image'),
         },
+        shareImage: inspectShareImage(shareImageFile),
+    };
+}
+
+function replaceWebShareImage(projectRoot, dataUrl) {
+    const match = String(dataUrl || '').match(/^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) throw new Error('分享图片必须转换为 JPEG 后再保存');
+    const content = Buffer.from(match[1], 'base64');
+    if (content.length === 0 || content.length > 20 * 1024 * 1024) {
+        throw new Error('分享图片大小必须在 1 Byte 到 20 MB 之间');
+    }
+    if (content[0] !== 0xFF || content[1] !== 0xD8 || content[2] !== 0xFF) {
+        throw new Error('分享图片不是有效的 JPEG 文件');
+    }
+
+    const templateRoot = path.join(projectRoot, 'build-templates', 'web-mobile');
+    const imageFile = path.join(templateRoot, 'invite.jpg');
+    const templateFile = path.join(templateRoot, 'index.ejs');
+    fs.writeFileSync(imageFile, content);
+
+    let template = fs.readFileSync(templateFile, 'utf8');
+    template = replaceMetaContent(template, 'og:image', './invite.jpg');
+    template = replaceMetaContent(template, 'twitter:image', './invite.jpg');
+    fs.writeFileSync(templateFile, template, 'utf8');
+    return inspectShareImage(imageFile);
+}
+
+function inspectShareImage(file) {
+    if (!fs.existsSync(file)) return { file, dataUrl: '', size: 0 };
+    const content = fs.readFileSync(file);
+    return {
+        file,
+        dataUrl: `data:image/jpeg;base64,${content.toString('base64')}`,
+        size: content.length,
     };
 }
 
@@ -352,4 +387,4 @@ function extractMetaValue(template, name) {
     return content ? content[1].trim() : '';
 }
 
-module.exports = { WEB_RELEASES, inspectWebRelease, saveWebReleaseSettings };
+module.exports = { WEB_RELEASES, inspectWebRelease, replaceWebShareImage, saveWebReleaseSettings };

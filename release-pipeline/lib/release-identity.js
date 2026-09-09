@@ -3,17 +3,28 @@
 const fs = require('fs');
 const path = require('path');
 
-const APP_VERSION_CONFIG = path.join('assets', 'src', 'Config.ts');
+const APP_VERSION_CONFIG = path.join('assets', 'base', 'src', 'Config.ts');
+const APP_VERSION_CONFIG_CANDIDATES = [
+    APP_VERSION_CONFIG,
+    path.join('assets', 'src', 'Config.ts'),
+];
 const RELEASE_ENVIRONMENTS = new Set(['development', 'test', 'production']);
+const APP_ENVIRONMENT_BY_RELEASE = Object.freeze({
+    development: 'dev',
+    test: 'test',
+    production: 'prod',
+});
 
 function resolveAppVersion(projectRoot, provided) {
     if (provided !== undefined && provided !== null && String(provided).trim()) {
         return normalizePathSegment(provided, 'app version');
     }
 
-    const configPath = path.join(projectRoot, APP_VERSION_CONFIG);
-    if (!fs.existsSync(configPath)) {
-        throw new Error(`Cannot resolve app version: ${configPath} does not exist`);
+    const configPath = APP_VERSION_CONFIG_CANDIDATES
+        .map(relative => path.join(projectRoot, relative))
+        .find(file => fs.existsSync(file));
+    if (!configPath) {
+        throw new Error(`Cannot resolve app version: none of ${APP_VERSION_CONFIG_CANDIDATES.join(', ')} exists in ${projectRoot}`);
     }
 
     const source = fs.readFileSync(configPath, 'utf8');
@@ -40,6 +51,35 @@ function resolveReleaseEnvironment(provided, outputName) {
         if (pattern.test(normalizedOutput)) return environment;
     }
     return 'production';
+}
+
+function resolveH5Host(projectRoot, releaseEnvironment) {
+    const environment = APP_ENVIRONMENT_BY_RELEASE[resolveReleaseEnvironment(releaseEnvironment)];
+    const configPath = APP_VERSION_CONFIG_CANDIDATES
+        .map(relative => path.join(projectRoot, relative))
+        .find(file => fs.existsSync(file));
+    if (!configPath) {
+        throw new Error(`Cannot resolve h5Host: none of ${APP_VERSION_CONFIG_CANDIDATES.join(', ')} exists in ${projectRoot}`);
+    }
+
+    const source = fs.readFileSync(configPath, 'utf8');
+    const environmentPattern = new RegExp(`\\b${environment}\\s*:\\s*\\{([\\s\\S]*?)\\n\\s*\\},`);
+    const environmentMatch = source.match(environmentPattern);
+    const h5HostMatch = environmentMatch && environmentMatch[1].match(/\bh5Host\s*:\s*(["'])([^"'\\\r\n]+)\1/);
+    if (!h5HostMatch) {
+        throw new Error(`Cannot resolve h5Host for ${environment} from ${configPath}`);
+    }
+
+    let parsed;
+    try {
+        parsed = new URL(h5HostMatch[2]);
+    } catch (_) {
+        throw new Error(`Invalid h5Host for ${environment} in ${configPath}: ${h5HostMatch[2]}`);
+    }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash) {
+        throw new Error(`h5Host must be a public HTTPS origin for ${environment}: ${h5HostMatch[2]}`);
+    }
+    return parsed.origin;
 }
 
 function createDisplayVersion(appVersion, fingerprint) {
@@ -76,10 +116,12 @@ function formatArchiveTimestamp(value = new Date()) {
 
 module.exports = {
     APP_VERSION_CONFIG,
+    APP_VERSION_CONFIG_CANDIDATES,
     RELEASE_ENVIRONMENTS,
     createDisplayVersion,
     formatArchiveTimestamp,
     normalizePathSegment,
     resolveAppVersion,
+    resolveH5Host,
     resolveReleaseEnvironment,
 };

@@ -985,6 +985,7 @@ function isPipelineArtifact(relative) {
         || relative.indexOf('.release-pipeline/') === 0
         || relative.indexOf('.release-pipeline-backups/') === 0
         || relative.indexOf('.release-pipeline-reports/') === 0
+        || relative.indexOf('render-optimization-report/') === 0
         || relative.indexOf('.release-pipeline-staging-') === 0;
 }
 

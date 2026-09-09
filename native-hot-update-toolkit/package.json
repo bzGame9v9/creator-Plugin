@@ -1,7 +1,7 @@
 {
   "package_version": 2,
   "name": "native-hot-update-toolkit",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "title": "项目发布中心",
   "description": "Android APK/Bundle 与 Web 多环境构建、预检、归档和发布中心。",
   "author": "Gala Client",
@@ -38,6 +38,7 @@
       "run-web-release": { "methods": ["runWebRelease"] },
       "inspect-web-release": { "methods": ["inspectCurrentWebRelease"] },
       "save-web-release-config": { "methods": ["saveCurrentWebRelease"] },
+      "replace-web-share-image": { "methods": ["replaceCurrentWebShareImage"] },
       "stop-pipeline": { "methods": ["stopPipeline"] },
       "refresh-releases": { "methods": ["refreshReleases"] },
       "select-release": { "methods": ["selectRelease"] },

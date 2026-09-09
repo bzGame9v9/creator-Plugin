@@ -8,6 +8,7 @@ const {
     ensureLocalConfig,
     readConfig,
     saveConfig,
+    clearVersionOverrides,
     summarizeConfig,
 } = require('./core/config-service');
 const {
@@ -16,7 +17,7 @@ const {
     listReleaseFiles,
     loadReleaseFile,
 } = require('./core/release-inspector');
-const { WEB_RELEASES, inspectWebRelease, saveWebReleaseSettings } = require('./core/web-release-inspector');
+const { WEB_RELEASES, inspectWebRelease, replaceWebShareImage, saveWebReleaseSettings } = require('./core/web-release-inspector');
 
 const PACKAGE_NAME = 'native-hot-update-toolkit';
 let activeChild = null;
@@ -114,10 +115,13 @@ function createCliArgs(cliPath, configPath, mode, environment, input, skipCreato
     if ((mode === 'bundle' || mode === 'resources') && Array.isArray(input.selectedBundles) && input.selectedBundles.length) {
         args.push('--bundles', input.selectedBundles.join(','));
     }
+    if (mode === 'base-apk' && Array.isArray(input.channels) && input.channels.length) {
+        args.push('--channels', input.channels.join(','));
+    }
     return args;
 }
 
-function createEditorBuildPlan(root, configPath, mode, environment, selectedBundles = []) {
+function createEditorBuildPlan(root, configPath, mode, environment, selectedBundles = [], channels = []) {
     const configModulePath = path.join(root, 'tools', 'android-release', 'lib', 'config.js');
     const creatorModulePath = path.join(root, 'tools', 'android-release', 'lib', 'creator-config.js');
     if (!fs.existsSync(configModulePath) || !fs.existsSync(creatorModulePath)) {
@@ -125,7 +129,7 @@ function createEditorBuildPlan(root, configPath, mode, environment, selectedBund
     }
     const { loadPipelineConfig } = require(configModulePath);
     const { createCreatorBuildConfig } = require(creatorModulePath);
-    const context = loadPipelineConfig(configPath, { mode, environment, selectedBundles });
+    const context = loadPipelineConfig(configPath, { mode, environment, selectedBundles, channels });
     const creatorLogPath = path.join(context.reportDir, 'creator-build.log');
     fs.mkdirSync(context.reportDir, { recursive: true });
     const buildOptions = createCreatorBuildConfig(context);
@@ -209,11 +213,11 @@ function appendCreatorLogFile(logPath) {
     }
 }
 
-async function runCreatorInCurrentEditor(root, configPath, mode, environment, selectedBundles = []) {
+async function runCreatorInCurrentEditor(root, configPath, mode, environment, selectedBundles = [], channels = []) {
     if (!global.Editor || !Editor.Message || typeof Editor.Message.request !== 'function') {
         throw new Error('当前 Creator 消息服务不可用，无法执行编辑器内构建');
     }
-    const plan = createEditorBuildPlan(root, configPath, mode, environment, selectedBundles);
+    const plan = createEditorBuildPlan(root, configPath, mode, environment, selectedBundles, channels);
     appendLog('Creator', mode === 'bundle'
         ? `使用 Creator 官方 Bundle 构建：${selectedBundles.join(', ')}`
         : (mode === 'base-apk' ? '使用 Creator 官方构建生成基础 APK data' : '使用 Creator 官方构建生成全部资源'));
@@ -272,11 +276,7 @@ function extractCliFailure(stderr, code) {
 
 function friendlyBuildError(value) {
     const text = String(value && (value.stack || value.message) || value || '未知错误');
-    let match = text.match(/releaseSequence\s+(\d+)\s+must be greater than previous\s+(\d+)/i);
-    if (match) return `热更版本号 ${match[1]} 必须大于该环境上一版本 ${match[2]}，请改为至少 ${Number(match[2]) + 1}。`;
-    match = text.match(/base APK versionCode\s+(\d+)\s+must be greater than previous\s+(\d+)/i);
-    if (match) return `基础 APK versionCode ${match[1]} 必须大于上一基础包 ${match[2]}，请改为至少 ${Number(match[2]) + 1}。`;
-    match = text.match(/Immutable release already exists:\s*(.+)/i);
+    let match = text.match(/Immutable release already exists:\s*(.+)/i);
     if (match) return `热更版本目录已经存在，不能覆盖：${match[1]}。请提高当前环境的热更版本号。`;
     if (/signing\.required=true requires signing\.privateKeyPath/i.test(text)) return '已开启发布描述文件签名，请配置 PEM 私钥路径，或关闭“要求发布描述文件签名”。';
     return text.replace(/^Error:\s*/i, '').split(/\r?\n/, 1)[0];
@@ -303,6 +303,7 @@ function readCompletion(root, mode, environment) {
     if (!completed) throw new Error(`构建完成，但状态文件中没有 ${environment} 环境结果：${stateFile}`);
 
     const apkPath = mode === 'base-apk' && completed.apk && completed.apk.path || '';
+    const nativeUpdateFiles = completed.backendConfig && completed.backendConfig.channelVariants || {};
     const archive = completed.archive || {};
     const publishDirectory = completed.publishDirectory || {};
     const componentRelease = mode !== 'base-apk' && completed.componentRelease || null;
@@ -310,16 +311,18 @@ function readCompletion(root, mode, environment) {
         mode,
         environment,
         title: mode === 'base-apk'
-            ? '基础 APK 打包已完成'
+            ? `渠道 APK 打包已完成（${archive.apkPaths?.length || 1} 个）`
             : (mode === 'bundle' ? '选中 Bundle 打包已完成' : '资源包打包已完成'),
         releaseId: completed.releaseId || '',
         apkPath,
         apkDirectory: apkPath ? path.dirname(apkPath) : '',
         hotUpdateRoot,
         nativeUpdateFile: completed.backendConfig && completed.backendConfig.file || '',
+        nativeUpdateFiles,
         releaseDirectory: componentRelease && path.dirname(componentRelease.releaseFile) || '',
         archiveHotfixDirectory: archive.hotfixDirectory || '',
         archiveApkPath: archive.apkPath || '',
+        archiveApkPaths: archive.apkPaths || [],
         componentReleaseFile: componentRelease && (archive.componentReleaseFile || componentRelease.releaseFile) || '',
         changedComponents: componentRelease && componentRelease.changedComponents || [],
         componentUploadPaths: componentRelease && publishDirectory.bundleDirectories || [],
@@ -390,7 +393,11 @@ function resolvePublishArtifacts(root, raw) {
 function appendCompletionLogs(completion) {
     appendLog('完成', completion.title);
     if (completion.apkPath) appendLog('完成', `基础 APK：${completion.apkPath}`);
+    completion.archiveApkPaths?.forEach(item => appendLog('完成', `渠道 ${item.channelId}：${item.path}`));
     if (completion.nativeUpdateFile) appendLog('完成', `后台更新配置：${completion.nativeUpdateFile}`);
+    Object.entries(completion.nativeUpdateFiles || {}).forEach(([channelId, file]) => {
+        appendLog('完成', `渠道 ${channelId} 后台配置：${file}`);
+    });
     if (completion.componentReleaseFile) appendLog('完成', `版本清单：${completion.componentReleaseFile}`);
     if (completion.changedComponents?.length) appendLog('完成', `变化 Bundle：${completion.changedComponents.join(', ')}`);
     completion.componentUploadPaths?.forEach(item => appendLog('上传', item));
@@ -412,10 +419,21 @@ async function runPipeline(input = {}) {
     activeOperation = true;
     setState({ status: `执行 ${mode}`, busy: true, completion: null, logs: [], error: '' });
     try {
-        if (runCreatorHere) await runCreatorInCurrentEditor(root, configPath, mode, environment, input.selectedBundles || []);
+        if (runCreatorHere) {
+            await runCreatorInCurrentEditor(
+                root,
+                configPath,
+                mode,
+                environment,
+                input.selectedBundles || [],
+                input.channels || [],
+            );
+        }
         const args = createCliArgs(cliPath, configPath, mode, environment, input, runCreatorHere || input.skipCreator === true);
         setState({ status: runCreatorHere ? '生成发布文件' : `执行 ${mode}` });
         await runCli(root, args, environment);
+        if (mode === 'base-apk') clearVersionOverrides(root, environment, { versionCode: true });
+        if (mode === 'resources' || mode === 'bundle') clearVersionOverrides(root, environment, { releaseSequence: true });
         refreshState();
         const completion = readCompletion(root, mode, environment);
         appendCompletionLogs(completion);
@@ -558,6 +576,19 @@ function saveCurrentWebRelease(input = {}) {
     }
 }
 
+function replaceCurrentWebShareImage(input = {}) {
+    const root = projectRoot();
+    const environment = String(input.environment || 'dev');
+    try {
+        replaceWebShareImage(root, input.dataUrl);
+        const web = inspectWebRelease(root, environment);
+        return setState({ web, status: '分享图片已替换为 invite.jpg', error: '' });
+    } catch (error) {
+        setState({ status: '分享图片替换失败', error: errorText(error) });
+        throw error;
+    }
+}
+
 function copyFileToClipboard(target) {
     const file = path.resolve(String(target || ''));
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new Error(`文件不存在：${file}`);
@@ -629,6 +660,7 @@ exports.methods = {
     runWebRelease,
     inspectCurrentWebRelease,
     saveCurrentWebRelease,
+    replaceCurrentWebShareImage,
     stopPipeline,
     refreshReleases() {
         return refreshState();
