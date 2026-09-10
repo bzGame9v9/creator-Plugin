@@ -306,12 +306,12 @@ function readCompletion(root, mode, environment) {
     const nativeUpdateFiles = completed.backendConfig && completed.backendConfig.channelVariants || {};
     const archive = completed.archive || {};
     const publishDirectory = completed.publishDirectory || {};
-    const componentRelease = mode !== 'base-apk' && completed.componentRelease || null;
+    const componentRelease = completed.componentRelease || null;
     return {
         mode,
         environment,
         title: mode === 'base-apk'
-            ? `渠道 APK 打包已完成（${archive.apkPaths?.length || 1} 个）`
+            ? `渠道 APK 与同步资源打包已完成（${archive.apkPaths?.length || 1} 个）`
             : (mode === 'bundle' ? '选中 Bundle 打包已完成' : '资源包打包已完成'),
         releaseId: completed.releaseId || '',
         apkPath,
@@ -432,7 +432,10 @@ async function runPipeline(input = {}) {
         const args = createCliArgs(cliPath, configPath, mode, environment, input, runCreatorHere || input.skipCreator === true);
         setState({ status: runCreatorHere ? '生成发布文件' : `执行 ${mode}` });
         await runCli(root, args, environment);
-        if (mode === 'base-apk') clearVersionOverrides(root, environment, { versionCode: true });
+        if (mode === 'base-apk') clearVersionOverrides(root, environment, {
+            versionCode: true,
+            releaseSequence: true,
+        });
         if (mode === 'resources' || mode === 'bundle') clearVersionOverrides(root, environment, { releaseSequence: true });
         refreshState();
         const completion = readCompletion(root, mode, environment);

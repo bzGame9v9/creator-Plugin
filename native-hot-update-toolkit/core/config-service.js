@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolveAppVersion } = require('../../release-pipeline/lib/release-identity');
 
 const ENVIRONMENTS = new Set(['dev', 'test', 'prod']);
 
@@ -31,6 +32,7 @@ function readConfig(projectRoot) {
 
 function summarizeConfig(projectRoot) {
     const { file, value } = readConfig(projectRoot);
+    const appVersion = resolveAppVersion(projectRoot);
     const environment = ENVIRONMENTS.has(value.environment) ? value.environment : 'dev';
     const configuredVersionCode = positiveIntegerOrDefault(value.gradle && value.gradle.versionCode, 1);
     const stateFile = resolveConfiguredPath(projectRoot, value.pipeline && value.pipeline.stateFile);
@@ -72,6 +74,7 @@ function summarizeConfig(projectRoot) {
     const channelConfig = readChannelConfig(projectRoot, value.channelConfig);
     return {
         file,
+        appVersion,
         environment,
         releaseId: `${environment}_${environmentConfig.releaseSequence || value.releaseSequence || 0}`,
         releaseSequence: environmentConfig.releaseSequence || value.releaseSequence || 0,

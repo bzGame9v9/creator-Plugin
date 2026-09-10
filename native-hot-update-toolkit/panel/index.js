@@ -93,10 +93,11 @@ exports.template = [
   '      <div class="section-title">打入 APK 的 Bundle</div>',
   '      <div class="action-row compact"><ui-button id="selectAllApkBundles">全选完整包</ui-button><ui-button id="clearApkBundles">只保留 base</ui-button></div>',
   '      <div id="apkBundleSelection" class="bundle-selection"></div>',
-  '      <div class="summary">base 固定内置；勾选的 Bundle 直接打入 APK，适合无需 CDN 的完整测试包。本页不生成资源版本。</div>',
+  '      <div class="summary">base 固定内置；勾选的 Bundle 直接打入 APK。只要仍有远程 Bundle，本页会强制用同一次 Creator 输出同步生成下一资源版本、变化 Bundle 和 Manifest，避免 APK base 与 CDN 不一致。</div>',
+  '      <div class="toggle-row"><label><input type="checkbox" checked disabled>空包 APK 强制同步生成资源包与最新 Manifest</label></div>',
   '      <div class="section-title">基础包执行选项</div>',
   '      <div class="run-options"><label class="option-with-help"><input id="baseSkipChecks" type="checkbox"><span>跳过发布前检查</span><span class="help-tip" tabindex="0" data-tooltip="跳过配置中 checks 列出的代码、Bundle 边界、类型和热更测试，仅节省检查时间，不会跳过 Creator 构建或 Gradle。只适合本轮检查已通过且检查后代码与资源没有变化的情况；正式出包不建议勾选。">i</span></label><label class="option-with-help"><input id="baseSkipCreator" type="checkbox"><span>复用已有 Creator data</span><span class="help-tip" tabindex="0" data-tooltip="不再调用 Creator 构建资源，直接使用 build/android/data 和现有 Android 工程继续生成 APK。只适合刚完成一次成功 Creator 构建，且源码、资源、Bundle 配置、包名和构建选项都未变化的情况；目录被删除、构建中断或内容陈旧时严禁勾选。">i</span></label></div>',
-  '      <div class="action-row"><ui-button id="baseApk" class="danger">生成选中渠道 APK</ui-button><ui-button id="resume">恢复渠道包</ui-button></div>',
+  '      <div class="action-row"><ui-button id="baseApk" class="danger">生成渠道 APK + 同步资源</ui-button><ui-button id="resume">恢复渠道包</ui-button></div>',
   '    </section>',
   '    <section id="resources" class="page">',
   '      <div id="resourceSummary" class="summary"></div>',
@@ -530,6 +531,7 @@ function renderState(panel) {
     ? [
       '配置：' + config.file,
       '环境：' + formatEnvironment(config.environment),
+      '业务通信版本：' + config.appVersion + '（与 APK、热更版本独立）',
       '本次发布：' + config.releaseId + ' / ' + config.releaseSequence,
       '热更序号：' + (config.environment === 'prod' ? '正式服自动管理' : '建议上次 +1，实际按填写值'),
       '真实构建：' + (config.confirmed ? '已允许' : '已锁定')
@@ -538,8 +540,10 @@ function renderState(panel) {
   panel.$.baseSummary.textContent = config
     ? [
       '环境：' + formatEnvironment(config.environment),
+      '业务通信版本：' + config.appVersion,
       '本次 APK：versionCode ' + config.versionCode + '（Android 显示版本 ' + config.versionCode + '）' +
         (config.previousVersionCode ? '，上次 ' + config.previousVersionCode : ''),
+      '同步资源版本：' + config.releaseId + '（空包 APK 强制生成）',
       '默认渠道：' + ((config.channelConfig && config.channelConfig.defaultChannels || []).join(', ') || '未配置'),
       'APK 内容：base' + (Object.keys(config.bundles || {}).filter(function (name) {
         return config.bundles[name].includeInApk;
