@@ -269,8 +269,14 @@ function runCli(root, args, environment) {
 
 function extractCliFailure(stderr, code) {
     const lines = String(stderr || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-    const marked = [...lines].reverse().find(line => line.startsWith('[android-release]'));
-    const raw = marked ? marked.replace(/^\[android-release\]\s*/, '') : '';
+    const auditIndex = lines.findIndex(line => /\[BundleAudit\]\s+FAIL\s+violations=/i.test(line));
+    if (auditIndex >= 0) {
+        return friendlyBuildError(lines.slice(Math.max(0, auditIndex - 32), auditIndex + 1).join('\n'));
+    }
+    const markedIndex = lines.map(line => line.startsWith('[android-release]')).lastIndexOf(true);
+    const raw = markedIndex >= 0
+        ? lines.slice(markedIndex).join('\n').replace(/^\[android-release\]\s*/, '')
+        : '';
     return friendlyBuildError(raw || `Android release pipeline exited with code ${code}`);
 }
 
@@ -279,6 +285,19 @@ function friendlyBuildError(value) {
     let match = text.match(/Immutable release already exists:\s*(.+)/i);
     if (match) return `热更版本目录已经存在，不能覆盖：${match[1]}。请提高当前环境的热更版本号。`;
     if (/signing\.required=true requires signing\.privateKeyPath/i.test(text)) return '已开启发布描述文件签名，请配置 PEM 私钥路径，或关闭“要求发布描述文件签名”。';
+    match = text.match(/\[BundleAudit\]\s+FAIL\s+violations=(\d+)/i);
+    if (match) {
+        const orphanMeta = [...text.matchAll(/\[orphan-meta\]\s+(.+)/gi)].map(item => item[1]);
+        if (orphanMeta.length) {
+            return `发布前 Bundle 边界检查失败：发现 ${match[1]} 个问题，其中 ${orphanMeta.length} 个是孤立 .meta 文件。请删除对应无源文件的元数据，或恢复对应资源：${orphanMeta.join('、')}`;
+        }
+        return `发布前 Bundle 边界检查失败：共发现 ${match[1]} 个问题。请查看执行日志中的 [BundleAudit] 明细。`;
+    }
+    match = text.match(/Missing project Node\.js dependency\s+"([^"]+)"/i)
+        || text.match(/Cannot find module ['"]([^'"]+)['"]/i);
+    if (match) {
+        return `当前项目缺少 Node.js 依赖模块“${match[1]}”。请在当前项目根目录执行 npm.cmd ci --include=dev 后重试。`;
+    }
     return text.replace(/^Error:\s*/i, '').split(/\r?\n/, 1)[0];
 }
 

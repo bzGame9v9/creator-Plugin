@@ -179,6 +179,7 @@ exports.template = [
   '  </section>',
   '  <pre id="error" class="error"></pre>',
   '  <div id="webActionBar" class="web-action-bar"><ui-button id="webSave">保存 Web 配置</ui-button><ui-button id="webBuild" class="primary">生成当前环境 Web 包</ui-button></div>',
+  '  <div id="logResizeHandle" class="log-resize-handle" role="separator" aria-label="拖动调整执行日志高度" title="上下拖动调整执行日志高度"></div>',
   '  <section class="execution-log">',
   '    <div class="log-head"><strong>执行日志</strong><ui-button id="copyLogs">复制日志</ui-button><ui-button id="clearLogs">清空显示</ui-button></div>',
   '    <textarea id="logs" class="logs" readonly spellcheck="false">暂无日志。</textarea>',
@@ -204,7 +205,7 @@ exports.style = [
   '.run-options,.toggle-row{margin-top:12px}.run-options label,.toggle-row label{display:flex;align-items:center;gap:5px;color:rgba(255,255,255,.72)}.action-row{margin-top:18px;padding-top:12px;border-top:1px solid rgba(255,255,255,.1)}',
   '.summary{margin-top:12px;padding:9px 11px;line-height:1.65;background:rgba(255,255,255,.05);white-space:pre-wrap;overflow-wrap:anywhere}',
   '.completion-result{position:relative;display:none;align-items:center;gap:16px;padding:10px 46px 10px 16px;border-top:1px solid rgba(90,190,125,.35);background:rgba(45,130,75,.14)}.completion-close{position:absolute;top:8px;right:10px;width:28px;height:28px;padding:0;border:0;color:rgba(255,255,255,.72);background:transparent;font:22px/1 sans-serif;cursor:pointer}.completion-close:hover,.completion-close:focus{color:#fff;background:rgba(255,255,255,.1)}.completion-content{min-width:0;flex:1}.completion-content strong{color:#9fe2b4}.completion-content pre{margin:4px 0 0;color:rgba(255,255,255,.72);font:12px/1.5 Consolas,"Courier New",monospace;white-space:pre-wrap;overflow-wrap:anywhere}.completion-actions{display:flex;gap:8px;flex-wrap:wrap}',
-  '.execution-log{flex:0 0 220px;min-height:0;box-sizing:border-box;padding:9px 16px 12px;border-top:1px solid rgba(255,255,255,.1)}.log-head strong{margin-right:auto}.logs{width:100%;height:168px;box-sizing:border-box;overflow:auto;margin:7px 0 0;padding:10px;resize:none;color:#d6e4eb;background:rgba(0,0,0,.22);white-space:pre;user-select:text;cursor:text}',
+  '.log-resize-handle{flex:0 0 8px;height:8px;box-sizing:border-box;border-top:1px solid rgba(255,255,255,.16);border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.035);cursor:ns-resize;user-select:none}.log-resize-handle::after{display:block;width:42px;margin:2px auto 0;color:rgba(255,255,255,.45);font:12px/1 sans-serif;text-align:center;content:"⋯"}.log-resize-handle:hover,.log-resize-handle.dragging{border-color:#55a9d1;background:rgba(85,169,209,.16)}.execution-log{display:flex;flex:0 0 220px;min-height:0;box-sizing:border-box;flex-direction:column;overflow:hidden;padding:9px 16px 12px;border-top:1px solid rgba(255,255,255,.1)}.log-head{flex:0 0 auto}.log-head strong{margin-right:auto}.logs{width:100%;flex:1;min-height:0;height:auto;box-sizing:border-box;overflow:auto;margin:7px 0 0;padding:10px;resize:none;color:#d6e4eb;background:rgba(0,0,0,.22);white-space:pre;user-select:text;cursor:text}',
   '.section-title{margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.1);font-weight:600}.section-title:first-child{margin-top:0}',
   '.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}.form-grid label{display:flex;min-width:0;flex-direction:column;gap:5px;color:rgba(255,255,255,.72)}.span-2{grid-column:span 2}',
   '.bundle-table{display:grid;grid-template-columns:70px 130px 100px minmax(220px,1fr) 80px;gap:7px;align-items:center}.bundle-policy{display:grid;grid-template-columns:120px 120px;gap:8px;align-items:center}.bundle-table input[type=checkbox],.bundle-policy input[type=checkbox]{justify-self:center}.bundle-head{font-weight:600;color:rgba(255,255,255,.7)}',
@@ -237,7 +238,7 @@ exports.$ = {
   useDebugKeystore: '#useDebugKeystore', keystorePath: '#keystorePath', keystorePassword: '#keystorePassword', keystoreAlias: '#keystoreAlias', keystoreAliasPassword: '#keystoreAliasPassword',
   stateFile: '#stateFile', reportRoot: '#reportRoot',
   artifactRoot: '#artifactRoot', archiveRoot: '#archiveRoot', hotfixMode: '#hotfixMode', configPath: '#configPath', releaseSelect: '#releaseSelect', releaseFile: '#releaseFile',
-  reloadReleases: '#reloadReleases', openRelease: '#openRelease', releaseSummary: '#releaseSummary', releaseJson: '#releaseJson', error: '#error',
+  reloadReleases: '#reloadReleases', openRelease: '#openRelease', releaseSummary: '#releaseSummary', releaseJson: '#releaseJson', error: '#error', logResizeHandle: '#logResizeHandle',
   openPublishDirectory: '#openPublishDirectory', copyVersionManifest: '#copyVersionManifest', copyBackendJson: '#copyBackendJson',
   webSummary: '#webSummary', webSave: '#webSave', webBuild: '#webBuild',
   webGoogleClientId: '#webGoogleClientId', webLiveChatId: '#webLiveChatId', webFacebookAppId: '#webFacebookAppId', webThinkingDataAppId: '#webThinkingDataAppId',
@@ -675,6 +676,57 @@ function formatLogText(state) {
   return lines.length ? lines.join('\n') : '暂无日志。';
 }
 
+function setupLogResizer(panel) {
+  const handle = panel.$.logResizeHandle;
+  const logs = panel.$.logs;
+  const executionLog = logs && logs.closest('.execution-log');
+  if (!handle || !executionLog) return;
+
+  const storageKey = 'native-hot-update-toolkit.execution-log-height';
+  const minHeight = 140;
+  const defaultHeight = 220;
+  const readStoredHeight = function () {
+    try {
+      const value = Number(localStorage.getItem(storageKey));
+      return Number.isFinite(value) ? value : defaultHeight;
+    } catch (_) {
+      return defaultHeight;
+    }
+  };
+  const setHeight = function (value) {
+    const panelHeight = Number(panel.getBoundingClientRect && panel.getBoundingClientRect().height) || 0;
+    const maxHeight = Math.max(minHeight, panelHeight > 0 ? panelHeight - 220 : 720);
+    const height = Math.round(Math.max(minHeight, Math.min(maxHeight, value)));
+    executionLog.style.flexBasis = `${height}px`;
+    executionLog.dataset.height = String(height);
+  };
+  setHeight(readStoredHeight());
+
+  handle.addEventListener('pointerdown', function (event) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = executionLog.getBoundingClientRect().height;
+    handle.classList.add('dragging');
+    try { handle.setPointerCapture(event.pointerId); } catch (_) { /* older Creator WebView */ }
+
+    const move = function (moveEvent) {
+      setHeight(startHeight - (moveEvent.clientY - startY));
+    };
+    const end = function () {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      handle.classList.remove('dragging');
+      try { handle.releasePointerCapture(event.pointerId); } catch (_) { /* already released */ }
+      try { localStorage.setItem(storageKey, executionLog.dataset.height || String(defaultHeight)); } catch (_) { /* optional persistence */ }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  });
+}
+
 async function copyText(value) {
   if (!value || value === '暂无日志。') throw new Error('当前没有可复制的日志');
   if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
@@ -831,6 +883,7 @@ exports.methods = {
 
 exports.ready = async function ready() {
   const panel = this;
+  setupLogResizer(panel);
   Array.from(this.$.workspaceTabs.querySelectorAll('.workspace-tab')).forEach(function (tab) {
     tab.addEventListener('click', function () { switchWorkspace(panel, tab.dataset.workspace); });
   });
