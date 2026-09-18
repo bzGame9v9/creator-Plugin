@@ -18,6 +18,7 @@ const {
     loadReleaseFile,
 } = require('./core/release-inspector');
 const { WEB_RELEASES, inspectWebRelease, replaceWebShareImage, saveWebReleaseSettings } = require('./core/web-release-inspector');
+const { resolveToolPaths } = require('./core/tool-layout');
 
 const PACKAGE_NAME = 'native-hot-update-toolkit';
 let activeChild = null;
@@ -122,10 +123,11 @@ function createCliArgs(cliPath, configPath, mode, environment, input, skipCreato
 }
 
 function createEditorBuildPlan(root, configPath, mode, environment, selectedBundles = [], channels = []) {
-    const configModulePath = path.join(root, 'tools', 'android-release', 'lib', 'config.js');
-    const creatorModulePath = path.join(root, 'tools', 'android-release', 'lib', 'creator-config.js');
+    const androidReleaseRoot = resolveToolPaths(root).androidRelease;
+    const configModulePath = path.join(androidReleaseRoot, 'lib', 'config.js');
+    const creatorModulePath = path.join(androidReleaseRoot, 'lib', 'creator-config.js');
     if (!fs.existsSync(configModulePath) || !fs.existsSync(creatorModulePath)) {
-        throw new Error('Android release Creator adapter is incomplete under tools/android-release/lib');
+        throw new Error(`Android release Creator adapter is incomplete under ${androidReleaseRoot}/lib`);
     }
     const { loadPipelineConfig } = require(configModulePath);
     const { createCreatorBuildConfig } = require(creatorModulePath);
@@ -280,23 +282,128 @@ function extractCliFailure(stderr, code) {
     return friendlyBuildError(raw || `Android release pipeline exited with code ${code}`);
 }
 
-function friendlyBuildError(value) {
-    const text = String(value && (value.stack || value.message) || value || '未知错误');
-    let match = text.match(/Immutable release already exists:\s*(.+)/i);
-    if (match) return `热更版本目录已经存在，不能覆盖：${match[1]}。请提高当前环境的热更版本号。`;
-    if (/signing\.required=true requires signing\.privateKeyPath/i.test(text)) return '已开启发布描述文件签名，请配置 PEM 私钥路径，或关闭“要求发布描述文件签名”。';
-    match = text.match(/\[BundleAudit\]\s+FAIL\s+violations=(\d+)/i);
-    if (match) {
+/**
+ * 用户可见错误的中文化规则表。
+ * 每项 = [匹配正则, 处理函数(match, 全文) 或 固定文案]；按顺序命中即返回。
+ * 都不命中时交给 friendlyBuildError 兜底（输出原始消息首行）。
+ */
+const BUILD_ERROR_RULES = [
+    // —— 执行开关与环境 ——
+    [/pipeline\.confirmed must be true/i,
+        '当前项目的「允许真实构建」开关没有打开。请在插件「基础配置」页的「执行保护与目录」里勾选「允许真实构建」，点右上角「保存配置」后重试。'],
+    [/Replace the example CDN baseUrl/i,
+        '当前环境的 CDN 地址还是模板示例值。请在「基础配置」页把「热更资源根地址（baseUrl）」改成线上真实域名后再构建。'],
+    [/Unsupported environment:\s*(\S+)/i,
+        (m) => `不支持的环境：${m[1]}。可选值为 dev（开发）/ test（测试）/ prod（正式）。`],
+    [/Missing environments\.(\w+)/i,
+        (m) => `配置里缺少 ${m[1]} 环境的定义。请在「基础配置」页切到该环境保存一次配置后重试。`],
+
+    // —— 版本号与热更序号 ——
+    [/releaseSequence\s+(\d+)\s+must be greater than previous\s+(\d+)/i,
+        (m) => `热更版本号 ${m[1]} 必须大于该环境上一版本 ${m[2]}，请改为至少 ${Number(m[2]) + 1}。`],
+    [/base APK versionCode\s+(\d+)\s+must be greater than previous\s+(\d+)/i,
+        (m) => `基础 APK versionCode ${m[1]} 必须大于上一基础包 ${m[2]}，请改为至少 ${Number(m[2]) + 1}。`],
+    [/releaseSequence must be a four-digit integer from 1001 to 9999/i,
+        '热更序号必须是 1001~9999 的四位数。请在「基础配置」页修正「资源热更版本」后重试。'],
+    [/gradle\.versionCode must be a positive integer/i,
+        'APK versionCode 必须是正整数。请在「APK 打包」页修正后重试。'],
+    [/Immutable release already exists:\s*(.+)/i,
+        (m) => `该热更版本已经存在，不能覆盖：${m[1]}。请提高当前环境的热更序号后重试。`],
+    [/No successful (\w+) release is available to resume/i,
+        (m) => `没有可用于恢复的 ${m[1]} 环境构建记录。请先完整执行一次打包，再使用「恢复」。`],
+    [/--resume is only supported for base-apk/i,
+        '「恢复」只支持 APK 打包模式，其它模式请直接执行普通构建。'],
+
+    // —— 签名 ——
+    [/signing\.required=true requires signing\.privateKeyPath/i,
+        '已开启「要求发布描述文件签名」，但没有配置 PEM 私钥路径。请补上私钥路径，或关闭该签名要求。'],
+    [/Signing private key not found:\s*(.+)/i,
+        (m) => `找不到签名私钥文件：${m[1]}。请检查配置里的路径是否正确，或改用 Creator Debug 密钥（仅本地测试）。`],
+
+    // —— 工具链路径 ——
+    [/Cocos Creator executable not found[.:]?\s*(?:Checked:)?\s*(.*)/i,
+        (m) => `找不到 Cocos Creator 程序。请在「基础配置」页填写「Cocos Creator 程序路径」。${m[1] ? `已尝试的路径：${m[1].trim()}` : ''}`],
+    [/Creator executable not found:\s*(.+)/i,
+        (m) => `找不到 Cocos Creator 程序：${m[1]}。请检查「基础配置」页的「Cocos Creator 程序路径」。`],
+    [/(?:gradle\.executable|Gradle wrapper) not found:\s*(.+)/i,
+        (m) => `找不到 Gradle 可执行文件：${m[1]}。请确认 Creator 已生成 Android 原生工程（build/android/proj）。`],
+    [/creator\.startScene is required/i,
+        '配置缺少启动场景（creator.startScene）。请重新初始化项目发布配置。'],
+
+    // —— Bundle 配置 ——
+    [/Bundle build requires --bundles/i,
+        '「Bundle 打包」至少需要勾选一个 Bundle。请在上方列表里勾选后重试。'],
+    [/(?:Selected resource Bundle|Selected Bundle|APK Bundle) is not configured:\s*(.+)/i,
+        (m) => `勾选的 Bundle「${m[1]}」不在当前项目配置里。请取消勾选它，或在 config.local.json 的 bundles 列表中补上该 Bundle。`],
+    [/(?:Default hall Bundle is not declared|componentRelease hall Bundle is not configured):\s*(.+)/i,
+        (m) => `大厅 Bundle「${m[1]}」没有在配置里声明。请检查「资源打包」页的「当前渠道大厅 Bundle」设置。`],
+    [/hallBundle must be declared in hallBundles/i,
+        '「当前渠道大厅 Bundle」必须包含在「可选大厅 Bundle」列表里。请在「资源打包」页修正。'],
+    [/bundles\[\] is required/i,
+        '配置里没有任何 Bundle 定义（bundles[]）。请重新初始化项目发布配置。'],
+
+    // —— 配置模板与适配器 ——
+    [/Android release config template not found:\s*(.+)/i,
+        (m) => `找不到发布配置模板：${m[1]}。说明发布工具目录不完整，请检查 tools/release-center/android-release 下的 config.example.json。`],
+    [/Android release CLI not found:\s*(.+)/i,
+        (m) => `找不到发布 CLI：${m[1]}。说明发布工具目录不完整或位置被移动过。`],
+    [/Android release Creator adapter is incomplete/i,
+        '发布工具缺少 Creator 适配器文件（android-release/lib 下的 config.js / creator-config.js）。请检查 tools/release-center/android-release/lib 是否完整。'],
+    [/Channel config not found:\s*(.+)/i,
+        (m) => `找不到渠道配置文件：${m[1]}。请检查「基础配置」页的渠道配置路径，或重新初始化配置。`],
+    [/Archive source does not exist:\s*(.+)/i,
+        (m) => `归档里找不到需要的内容：${m[1]}。该 Bundle 的历史制品可能已被清理，请重新完整打包一次资源。`],
+
+    // —— Creator 产出 ——
+    [/Creator buildRoot missing:\s*(.+)/i,
+        (m) => `找不到 Creator 构建产物目录：${m[1]}。请取消勾选「复用已有 Creator 输出」，执行一次完整构建。`],
+    [/Creator did not generate (\S+) Bundle root:\s*(.+)/i,
+        (m) => `Creator 没有生成「${m[1]}」的 Bundle 目录：${m[2]}。请确认该 Bundle 下有资源后重新完整构建。`],
+    [/Creator did not generate selected Bundle (\S+):\s*(.+)/i,
+        (m) => `Creator 没有生成勾选的 Bundle「${m[1]}」：${m[2]}。请确认该 Bundle 下有资源后重新构建。`],
+
+    // —— APK 校验 ——
+    [/Base APK still contains remote Bundle files/i,
+        '基础 APK 里仍然包含远程 Bundle 的资源文件（本应完全剥离）。请确认「打入 APK 的 Bundle」勾选与远程 Bundle 声明一致后重新打包。'],
+    [/Base APK Bundle depends on remote Bundle/i,
+        'base 的 Bundle 依赖了远程 Bundle，这会导致原生启动失败。请先解耦依赖再重新构建（明细见执行日志）。'],
+    [/APK packageName mismatch:\s*expected\s*(\S+?),\s*got\s*(\S+)/i,
+        (m) => `APK 包名与配置不一致：期望 ${m[1]}，实际 ${m[2]}。请检查「基础配置」页的 Android 包名。`],
+    [/APK versionCode mismatch:\s*expected\s*(\S+?),\s*got\s*(\S+)/i,
+        (m) => `APK versionCode 与配置不一致：期望 ${m[1]}，实际 ${m[2]}。`],
+    [/APK versionName mismatch:\s*expected\s*(\S+?),\s*got\s*(\S+)/i,
+        (m) => `APK versionName 与配置不一致：期望 ${m[1]}，实际 ${m[2]}。`],
+    [/(?:APK not found|Gradle APK metadata not found):\s*(.+)/i,
+        (m) => `找不到构建出的 APK 或 Gradle 元数据：${m[1]}。请确认 Gradle 构建成功、输出目录正确。`],
+
+    // —— 前置检查与依赖 ——
+    [/\[BundleAudit\]\s+FAIL\s+violations=(\d+)/i, (m, text) => {
         const orphanMeta = [...text.matchAll(/\[orphan-meta\]\s+(.+)/gi)].map(item => item[1]);
         if (orphanMeta.length) {
-            return `发布前 Bundle 边界检查失败：发现 ${match[1]} 个问题，其中 ${orphanMeta.length} 个是孤立 .meta 文件。请删除对应无源文件的元数据，或恢复对应资源：${orphanMeta.join('、')}`;
+            return `发布前 Bundle 边界检查失败：发现 ${m[1]} 个问题，其中 ${orphanMeta.length} 个是孤立 .meta 文件。请删除对应无源文件的元数据，或恢复对应资源：${orphanMeta.join('、')}`;
         }
-        return `发布前 Bundle 边界检查失败：共发现 ${match[1]} 个问题。请查看执行日志中的 [BundleAudit] 明细。`;
-    }
-    match = text.match(/Missing project Node\.js dependency\s+"([^"]+)"/i)
-        || text.match(/Cannot find module ['"]([^'"]+)['"]/i);
-    if (match) {
-        return `当前项目缺少 Node.js 依赖模块“${match[1]}”。请在当前项目根目录执行 npm.cmd ci --include=dev 后重试。`;
+        return `发布前 Bundle 边界检查失败：共发现 ${m[1]} 个问题。请查看执行日志中的 [BundleAudit] 明细，或临时勾选「跳过发布前检查」定位问题。`;
+    }],
+    [/Release Debug audit failed:\s*\n?([\s\S]*)/i, (m) => {
+        const all = m[1].split('\n').map(line => line.trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+        return `发布前 debug 审计未通过：${all.slice(0, 3).join('；')}${all.length > 3 ? `（共 ${all.length} 条，完整明细见执行日志）` : ''}`;
+    }],
+    [/Missing project Node\.js dependency\s+"([^"]+)"/i,
+        (m) => `当前项目缺少 Node.js 依赖模块「${m[1]}」。请在项目根目录执行 npm.cmd ci --include=dev 后重试。`],
+    [/Cannot find module ['"]([^'"]+)['"]/i,
+        (m) => `运行发布工具时找不到模块「${m[1]}」。若属项目依赖，请在项目根目录执行 npm.cmd ci --include=dev；若属工具内部文件，说明发布工具目录不完整。`],
+
+    // —— Creator 构建 ——
+    [/Creator 构建退出码\s*(\S+)/i,
+        (m) => `Creator 构建失败（退出码 ${m[1]}）。请查看执行日志里的 Creator 日志定位具体报错。`],
+];
+
+function friendlyBuildError(value) {
+    const text = String(value && (value.stack || value.message) || value || '未知错误');
+    for (const [pattern, handler] of BUILD_ERROR_RULES) {
+        const match = text.match(pattern);
+        if (!match) continue;
+        return typeof handler === 'function' ? handler(match, text) : handler;
     }
     return text.replace(/^Error:\s*/i, '').split(/\r?\n/, 1)[0];
 }
@@ -419,7 +526,11 @@ function appendCompletionLogs(completion) {
     });
     if (completion.componentReleaseFile) appendLog('完成', `版本清单：${completion.componentReleaseFile}`);
     if (completion.changedComponents?.length) appendLog('完成', `变化 Bundle：${completion.changedComponents.join(', ')}`);
-    completion.componentUploadPaths?.forEach(item => appendLog('上传', item));
+    if (completion.publishDirectoryRoot) appendLog('发布', `完整发布目录：${completion.publishDirectoryRoot}`);
+    if (completion.componentUploadPaths?.length) {
+        appendLog('发布', `发布目录 Bundle（按版本 Manifest 全量组装，共 ${completion.componentUploadPaths.length} 个）：`);
+        completion.componentUploadPaths.forEach(item => appendLog('发布', item));
+    }
     if (completion.archiveHotfixDirectory) appendLog('归档', `热更归档：${completion.archiveHotfixDirectory}`);
     if (completion.archiveApkPath) appendLog('归档', `APK 归档：${completion.archiveApkPath}`);
 }
@@ -428,7 +539,7 @@ async function runPipeline(input = {}) {
     if (activeOperation) throw new Error('已有热更新任务正在执行');
     const root = projectRoot();
     const configPath = ensureLocalConfig(root);
-    const cliPath = path.join(root, 'tools', 'android-release', 'cli.js');
+    const cliPath = path.join(resolveToolPaths(root).androidRelease, 'cli.js');
     if (!fs.existsSync(cliPath)) throw new Error(`Android release CLI not found: ${cliPath}`);
     const mode = ['validate', 'base-apk', 'resources', 'bundle'].includes(input.mode) ? input.mode : 'validate';
     const environment = ['dev', 'test', 'prod'].includes(input.environment) ? input.environment : 'dev';

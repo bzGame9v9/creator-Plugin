@@ -3,11 +3,12 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveAppVersion } = require('../../release-pipeline/lib/release-identity');
+const { resolveToolPaths } = require('./tool-layout');
 
 const ENVIRONMENTS = new Set(['dev', 'test', 'prod']);
 
 function configPaths(projectRoot) {
-    const root = path.join(projectRoot, 'tools', 'android-release');
+    const root = resolveToolPaths(projectRoot).androidRelease;
     return {
         local: path.join(root, 'config.local.json'),
         example: path.join(root, 'config.example.json'),
@@ -134,7 +135,7 @@ function summarizeConfig(projectRoot) {
 function readChannelConfig(projectRoot, configuredPath) {
     const file = resolveConfiguredPath(
         projectRoot,
-        configuredPath || 'project://tools/android-release/channels.json',
+        configuredPath || `project://${resolveToolPaths(projectRoot).androidReleaseRelative}/channels.json`,
     );
     if (!fs.existsSync(file)) return { file, defaultChannels: [], channels: [] };
     const value = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
@@ -357,7 +358,7 @@ function requiredText(value, label) {
 }
 
 function normalizeEnvironmentBaseUrl(projectRoot, value, environment) {
-    const projectModule = path.join(projectRoot, 'tools', 'native-hot-update-toolkit', 'lib', 'paths.js');
+    const projectModule = path.join(resolveToolPaths(projectRoot).hotUpdateLib, 'paths.js');
     if (!fs.existsSync(projectModule)) {
         throw new Error(`Native hot-update toolkit core not found: ${projectModule}`);
     }

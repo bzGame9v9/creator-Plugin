@@ -13,7 +13,7 @@
 ## CLI
 
 ```powershell
-node tools/release-cache-doctor.js --zip build/web-mobile.zip --url https://h5test.dudle.shop
+node tools/release-center/web/release-cache-doctor.js --zip build/web-mobile.zip --url https://h5test.dudle.shop
 ```
 
 可增加 `--origin-url` 对比源站，使用 `--json` 和 `--markdown` 导出报告。CLI 默认不添加时间戳或 `debug=1`，不访问 `/api/`，不执行 purge、注销 Worker 或删除浏览器缓存。

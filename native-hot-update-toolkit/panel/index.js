@@ -572,7 +572,7 @@ function renderState(panel) {
     : '配置不可用。';
   const publish = state.publish;
   panel.$.publishSummary.textContent = publish
-    ? ['当前发布：' + publish.releaseId, '完整发布目录：' + publish.publishDirectoryRoot, '本次新增 Bundle：' + ((publish.bundleDirectories || []).join('\n') || '无'), '版本 Manifest：' + publish.manifestFile, '后台 JSON：' + publish.backendFile].join('\n')
+    ? ['当前发布：' + publish.releaseId, '完整发布目录：' + publish.publishDirectoryRoot, '发布目录 Bundle（按版本清单全量）：' + ((publish.bundleDirectories || []).join('\n') || '无'), '版本 Manifest：' + publish.manifestFile, '后台 JSON：' + publish.backendFile].join('\n')
     : '还没有可发布的资源结果。';
   panel.$.openPublishDirectory.disabled = !publish || !publish.publishDirectoryRoot || !!state.busy;
   panel.$.copyVersionManifest.disabled = !publish || !publish.manifestFile || !!state.busy;
@@ -592,7 +592,7 @@ function renderState(panel) {
       : '',
     completion.componentReleaseFile ? '版本清单：' + completion.componentReleaseFile : '',
     completion.changedComponents && completion.changedComponents.length ? '变化 Bundle：' + completion.changedComponents.join(', ') : '',
-    completion.componentUploadPaths && completion.componentUploadPaths.length ? '最小上传：\n' + completion.componentUploadPaths.join('\n') : '',
+    completion.componentUploadPaths && completion.componentUploadPaths.length ? '发布目录 Bundle（按版本清单全量）：\n' + completion.componentUploadPaths.join('\n') : '',
     completion.publishDirectoryRoot ? '本次完整发布目录：' + completion.publishDirectoryRoot : '',
     completion.archiveHotfixDirectory ? '热更归档：' + completion.archiveHotfixDirectory : '',
     completion.archiveApkPaths && completion.archiveApkPaths.length

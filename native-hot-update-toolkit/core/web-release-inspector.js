@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolveToolPaths } = require('./tool-layout');
 
 const WEB_RELEASES = {
     dev: { releaseEnvironment: 'development', script: 'release:web:development', outputName: 'web-mobile-development', label: '开发服' },
@@ -33,7 +34,7 @@ function inspectWebRelease(projectRoot, environment) {
     const packageFile = path.join(projectRoot, 'package.json');
     const profileFile = path.join(projectRoot, 'profiles', 'v2', 'packages', 'web-mobile.json');
     const templateFile = path.join(projectRoot, 'build-templates', 'web-mobile', 'index.ejs');
-    const releaseToolFile = path.join(projectRoot, 'tools', 'release-web.js');
+    const releaseToolFile = path.join(resolveToolPaths(projectRoot).web, 'release-web.js');
     const releaseConfigFile = path.resolve(__dirname, '..', '..', 'release-pipeline', 'config', 'default-config.json');
     const shareImageFile = path.join(projectRoot, 'build-templates', 'web-mobile', 'invite.jpg');
 

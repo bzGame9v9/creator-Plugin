@@ -342,7 +342,13 @@ function compareReports(input) {
 }
 
 function browserScriptPath() {
-    return path.join(projectRoot(), 'tools', 'browser-cache-doctor.js');
+    // 本插件独立于发布工具插件，这里自行兼容两种 tools 布局。
+    const root = projectRoot();
+    const candidates = [
+        path.join(root, 'tools', 'release-center', 'web', 'browser-cache-doctor.js'),
+        path.join(root, 'tools', 'browser-cache-doctor.js'),
+    ];
+    return candidates.find(candidate => fs.existsSync(candidate)) || candidates[0];
 }
 
 function copyBrowserScript() {

@@ -5,7 +5,7 @@ Cocos Creator 3.8.x build extension for release post-processing.
 It supports two compatible entry points:
 
 - Cocos Creator build hook: runs after editor builds.
-- CLI: runs through `node tools/release-web.js` or `npm run release:web`.
+- CLI: runs through `node tools/release-center/web/release-web.js` or `npm run release:web`.
 
 Both entry points use the same task pipeline in `lib/pipeline.js`.
 
@@ -34,12 +34,12 @@ npm run release:web:pipeline
 Run a local self-test without touching `build/web-mobile`:
 
 ```bash
-node tools/test-release-pipeline.js
+node tools/release-center/web/test-release-pipeline.js
 ```
 
 ## Cocos Creator Path
 
-`tools/release-web.js` looks for `CocosCreator.exe` in common install paths and prefers the version from `package.json`.
+`tools/release-center/web/release-web.js` looks for `CocosCreator.exe` in common install paths and prefers the version from `package.json`.
 
 You can override it:
 
