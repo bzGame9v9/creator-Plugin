@@ -68,7 +68,7 @@ exports.template = /* html */ `
         <ui-button id="restoreBtn">恢复旧版转换</ui-button>
       </div>
       <div id="scanSummary" class="scan-summary">尚未扫描</div>
-      <input id="assetFilter" class="asset-filter" type="search" placeholder="筛选 Prefab / Scene，例如 Hall2Scene">
+      <input id="assetFilter" class="asset-filter" type="search" placeholder="筛选 Prefab / Scene，例如 HallAScene">
       <div id="scanAssets" class="scan-assets"><div class="asset-empty">请先只读扫描项目</div></div>
     </section>
     <section>
