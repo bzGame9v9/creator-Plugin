@@ -331,6 +331,12 @@ const BUILD_ERROR_RULES = [
         '配置缺少启动场景（creator.startScene）。请重新初始化项目发布配置。'],
 
     // —— Bundle 配置 ——
+    [/At least one hall Bundle name is required/i,
+        '「可选大厅 Bundle」不能为空，请至少填写一个已配置的大厅 Bundle。'],
+    [/hallBundles must not contain duplicate Bundle names/i,
+        '「可选大厅 Bundle」中有重复名称，请删除重复项。'],
+    [/Hall Bundle names must start with a letter/i,
+        '大厅 Bundle 名称必须以英文字母开头，且只能包含英文字母、数字、下划线或连字符。'],
     [/Bundle build requires --bundles/i,
         '「Bundle 打包」至少需要勾选一个 Bundle。请在上方列表里勾选后重试。'],
     [/(?:Selected resource Bundle|Selected Bundle|APK Bundle) is not configured:\s*(.+)/i,

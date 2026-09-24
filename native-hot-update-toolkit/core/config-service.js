@@ -176,9 +176,14 @@ function saveConfig(projectRoot, patch) {
             : (environment === 'prod' ? 'google_play' : 'direct_apk'));
     const hallBundles = String(patch.componentRelease?.hallBundles || 'hall')
         .split(',').map(item => item.trim()).filter(Boolean);
-    if (hallBundles.length === 0 || new Set(hallBundles).size !== hallBundles.length
-        || hallBundles.some(item => !/^[a-z][a-z0-9_-]*$/.test(item))) {
-        throw new Error('hallBundles must contain unique Bundle names');
+    if (hallBundles.length === 0) {
+        throw new Error('At least one hall Bundle name is required.');
+    }
+    if (new Set(hallBundles).size !== hallBundles.length) {
+        throw new Error('hallBundles must not contain duplicate Bundle names.');
+    }
+    if (hallBundles.some(item => !/^[A-Za-z][A-Za-z0-9_-]*$/.test(item))) {
+        throw new Error('Hall Bundle names must start with a letter and contain only letters, numbers, underscores, or hyphens.');
     }
     const configuredBundles = new Set((value.bundles || []).map(bundle => bundle.bundleName));
     const unknownHallBundle = hallBundles.find(item => !configuredBundles.has(item));
