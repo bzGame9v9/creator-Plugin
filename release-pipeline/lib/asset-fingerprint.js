@@ -31,6 +31,7 @@ async function run(context) {
 
     const tree = readTree(context);
     const initialTree = cloneTree(tree);
+    normalizeThinkingDataSdk(tree);
     const obfuscationResult = findTaskResult(context, 'obfuscateJs');
     const selected = new Set((obfuscationResult && obfuscationResult.processed || [])
         .concat(obfuscationResult && obfuscationResult.skipped || [])
@@ -312,7 +313,7 @@ function rewriteReferences(tree, renameMap) {
     }
 
     tree.forEach((buffer, relative) => {
-        if (relative === MANIFEST_FILE || !isTextFile(relative)) {
+        if (relative === MANIFEST_FILE || isThinkingDataSdk(relative) || !isTextFile(relative)) {
             return;
         }
         const source = buffer.toString('utf8');
@@ -328,6 +329,24 @@ function rewriteReferences(tree, renameMap) {
         }
     });
     return { changed };
+}
+
+function normalizeThinkingDataSdk(tree) {
+    tree.forEach((buffer, relative) => {
+        if (!isThinkingDataSdk(relative)) return;
+
+        let source = buffer.toString('utf8');
+        source = source.replace(/"index\.[a-f0-9]{5,32}\.js"/gi, '"."');
+        source = source.replace(
+            /\+"\."\+\(\(e=e\.getMilliseconds\(\)\)<10\?"00"\+e:e<100\?"0"\+e:e\)/,
+            ''
+        );
+        tree.set(relative, Buffer.from(source, 'utf8'));
+    });
+}
+
+function isThinkingDataSdk(relative) {
+    return /^thinkingdata\.2\.6\.1\.umd\.min(?:\.[a-f0-9]{5,32})?\.js$/i.test(path.posix.basename(relative));
 }
 
 function rewriteJson(source, relative, renameMap) {

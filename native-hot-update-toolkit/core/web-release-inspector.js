@@ -26,6 +26,7 @@ const REQUIRED_META = [
     ['mobile-web-app-capable', /<meta\s+name=["']mobile-web-app-capable["']/i],
     ['robots', /<meta\s+name=["']robots["']/i],
 ];
+const DESCRIPTION_META_NAMES = new Set(['description', 'og:description', 'twitter:description']);
 
 function inspectWebRelease(projectRoot, environment) {
     const release = WEB_RELEASES[environment] || WEB_RELEASES.dev;
@@ -185,7 +186,10 @@ function saveWebReleaseSettings(projectRoot, environment, patch) {
         ['twitter:description', patch.twitterDescription],
         ['twitter:image', patch.twitterImage],
     ]) {
-        template = replaceMetaContent(template, name, requiredValue(value, name));
+        const content = DESCRIPTION_META_NAMES.has(name)
+            ? requiredText(value, name)
+            : requiredValue(value, name);
+        template = replaceMetaContent(template, name, content);
     }
     const liveChatId = requiredDigits(patch.liveChatId, 'LiveChat ID');
     template = template.replace(/(window\.__lc\.license\s*=\s*)[0-9]+/, `$1${liveChatId}`);
@@ -217,7 +221,8 @@ function inspectSdkConfig(projectRoot, environment, template, errors, warnings) 
     const thinkingReceiver = quotedValue(thinkingData, /RECEIVER_URL\s*=\s*['"]([^'"]+)['"]/);
     const selectedThinkingAppId = thinkingAppIds[environment] || '';
     if (!selectedThinkingAppId) errors.push(`ThinkingData ${environment} AppId 未配置`);
-    if (environment !== 'development' && /debug|placeholder|appid/i.test(selectedThinkingAppId)) {
+    const isConfiguredTestAppId = environment === 'test' && selectedThinkingAppId === 'debug-appid';
+    if (environment !== 'development' && !isConfiguredTestAppId && /debug|placeholder|appid/i.test(selectedThinkingAppId)) {
         errors.push(`ThinkingData ${environment} AppId 仍是占位值`);
     }
     if (!thinkingReceiver) errors.push('ThinkingData Receiver URL 未配置');
@@ -307,7 +312,34 @@ function replaceMetaContent(source, name, value) {
 }
 
 function escapeAttribute(value) {
-    return String(value).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(value)
+        .replace(/\r\n?/g, '\n')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '&#10;');
+}
+
+function decodeHtmlEntities(value) {
+    const namedEntities = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' };
+    const normalized = String(value).replace(/&(?:amp;)*#(?:0*10|x0*a);/gi, '&#10;');
+    return normalized.replace(/&(?:amp|quot|apos|lt|gt);|&#(?:x[0-9a-f]+|\d+);/gi, entity => {
+        const named = entity.match(/^&([a-z]+);$/i);
+        if (named) return namedEntities[named[1].toLowerCase()] || entity;
+        const numeric = entity.match(/^&#(x?)([0-9a-f]+);$/i);
+        const codePoint = numeric[1]
+            ? Number.parseInt(numeric[2], 16)
+            : Number.parseInt(numeric[2], 10);
+        if (codePoint > 0x10FFFF || (codePoint >= 0xD800 && codePoint <= 0xDFFF)) return entity;
+        return String.fromCodePoint(codePoint);
+    });
+}
+
+function requiredText(value, label) {
+    const text = String(value == null ? '' : value);
+    if (!text.trim()) throw new Error(`${label} 不能为空`);
+    return text;
 }
 
 function requiredValue(value, label) {
@@ -375,7 +407,7 @@ function extractScripts(template, templateRoot) {
 function extractMetaValue(template, name) {
     if (name === 'title') {
         const title = template.match(/<title>([^<]+)<\/title>/i);
-        return title ? title[1].trim() : '';
+        return title ? decodeHtmlEntities(title[1].trim()) : '';
     }
     if (name === 'charset') {
         const charset = template.match(/<meta\s+charset=["']([^"']+)["']/i);
@@ -385,7 +417,9 @@ function extractMetaValue(template, name) {
     const tag = template.match(new RegExp(`<meta\\b[^>]*(?:name|property)=["']${escaped}["'][^>]*>`, 'i'));
     if (!tag) return '';
     const content = tag[0].match(/\bcontent=["']([^"']*)["']/i);
-    return content ? content[1].trim() : '';
+    if (!content) return '';
+    const value = DESCRIPTION_META_NAMES.has(name) ? content[1] : content[1].trim();
+    return decodeHtmlEntities(value);
 }
 
 module.exports = { WEB_RELEASES, inspectWebRelease, replaceWebShareImage, saveWebReleaseSettings };

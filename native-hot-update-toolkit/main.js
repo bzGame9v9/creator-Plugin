@@ -18,6 +18,7 @@ const {
     loadReleaseFile,
 } = require('./core/release-inspector');
 const { WEB_RELEASES, inspectWebRelease, replaceWebShareImage, saveWebReleaseSettings } = require('./core/web-release-inspector');
+const { shouldEmbedWebDebugger } = require('./core/web-debugger-settings');
 const { resolveToolPaths } = require('./core/tool-layout');
 
 const PACKAGE_NAME = 'native-hot-update-toolkit';
@@ -28,6 +29,13 @@ let state = null;
 
 function projectRoot() {
     return resolveProjectRoot();
+}
+
+function inspectWebReleaseState(root, environment) {
+    return {
+        ...inspectWebRelease(root, environment),
+        embedWebDebugger: shouldEmbedWebDebugger(environment),
+    };
 }
 
 function initialState() {
@@ -46,7 +54,7 @@ function initialState() {
             selectedFile: null,
             completion: null,
             publish: resolvePublishArtifacts(root, raw),
-            web: inspectWebRelease(root, config.environment || 'dev'),
+            web: inspectWebReleaseState(root, config.environment || 'dev'),
             logs: [],
             error: '',
         };
@@ -102,14 +110,15 @@ function refreshState() {
         config,
         releases: listReleases(root, raw),
         publish: resolvePublishArtifacts(root, raw),
-        web: inspectWebRelease(root, config.environment || 'dev'),
+        web: inspectWebReleaseState(root, config.environment || 'dev'),
         error: '',
     });
 }
 
 function createCliArgs(cliPath, configPath, mode, environment, input, skipCreator) {
     const args = [cliPath, '--config', configPath, '--mode', mode, '--env', environment];
-    if (input.dryRun === true || mode === 'validate') args.push('--dry-run');
+    if (input.dryRun === true || mode === 'validate' || input.preflightOnly === true) args.push('--dry-run');
+    if (mode === 'validate' || input.preflightOnly === true) args.push('--preflight-only');
     if (input.resume === true) args.push('--resume');
     if (input.skipChecks === true) args.push('--skip-checks');
     if (skipCreator) args.push('--skip-creator');
@@ -270,15 +279,16 @@ function runCli(root, args, environment) {
 }
 
 function extractCliFailure(stderr, code) {
-    const lines = String(stderr || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const text = String(stderr || '').replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '');
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const auditIndex = lines.findIndex(line => /\[BundleAudit\]\s+FAIL\s+violations=/i.test(line));
     if (auditIndex >= 0) {
         return friendlyBuildError(lines.slice(Math.max(0, auditIndex - 32), auditIndex + 1).join('\n'));
     }
-    const markedIndex = lines.map(line => line.startsWith('[android-release]')).lastIndexOf(true);
+    const markedIndex = text.lastIndexOf('[android-release]');
     const raw = markedIndex >= 0
-        ? lines.slice(markedIndex).join('\n').replace(/^\[android-release\]\s*/, '')
-        : '';
+        ? text.slice(markedIndex).replace(/^\[android-release\]\s*/, '')
+        : text;
     return friendlyBuildError(raw || `Android release pipeline exited with code ${code}`);
 }
 
@@ -303,8 +313,8 @@ const BUILD_ERROR_RULES = [
         (m) => `热更版本号 ${m[1]} 必须大于该环境上一版本 ${m[2]}，请改为至少 ${Number(m[2]) + 1}。`],
     [/base APK versionCode\s+(\d+)\s+must be greater than previous\s+(\d+)/i,
         (m) => `基础 APK versionCode ${m[1]} 必须大于上一基础包 ${m[2]}，请改为至少 ${Number(m[2]) + 1}。`],
-    [/releaseSequence must be a four-digit integer from 1001 to 9999/i,
-        '热更序号必须是 1001~9999 的四位数。请在「基础配置」页修正「资源热更版本」后重试。'],
+    [/releaseSequence must be an integer from 1 to 9999/i,
+        '热更序号必须是 1~9999 的正整数。请在「基础配置」页修正「资源热更版本」后重试。'],
     [/gradle\.versionCode must be a positive integer/i,
         'APK versionCode 必须是正整数。请在「APK 打包」页修正后重试。'],
     [/Immutable release already exists:\s*(.+)/i,
@@ -327,6 +337,12 @@ const BUILD_ERROR_RULES = [
         (m) => `找不到 Cocos Creator 程序：${m[1]}。请检查「基础配置」页的「Cocos Creator 程序路径」。`],
     [/(?:gradle\.executable|Gradle wrapper) not found:\s*(.+)/i,
         (m) => `找不到 Gradle 可执行文件：${m[1]}。请确认 Creator 已生成 Android 原生工程（build/android/proj）。`],
+    [/gradle\.executable must be "auto" or the project wrapper/i,
+        'APK 打包必须使用当前工程生成的 Gradle Wrapper，不能指定系统 Gradle。请在发布配置中将 gradle.executable 设为 auto，并确认 Wrapper 版本为 8.11.1。'],
+    [/Gradle version mismatch: release config expects\s*(\S+), but the generated Android project wrapper uses\s*(\S+)/i,
+        (m) => `Android 原生工程的 Gradle 版本不一致：配置要求 ${m[1]}，生成工程实际为 ${m[2]}。请在 Creator 中重新构建 Android 原生工程后重试。`],
+    [/legacy GALA_GRADLE_EXE override/i,
+        'Creator 原生模板仍包含旧 Gradle 覆盖脚本。请检查 build-templates/native/proj/gradlew.bat 并移除 GALA_GRADLE_EXE 覆盖后重试。'],
     [/creator\.startScene is required/i,
         '配置缺少启动场景（creator.startScene）。请重新初始化项目发布配置。'],
 
@@ -411,7 +427,83 @@ function friendlyBuildError(value) {
         if (!match) continue;
         return typeof handler === 'function' ? handler(match, text) : handler;
     }
+    const commandFailure = formatCommandFailure(text);
+    if (commandFailure) return commandFailure;
     return text.replace(/^Error:\s*/i, '').split(/\r?\n/, 1)[0];
+}
+
+function formatCommandFailure(text) {
+    const failed = text.match(/Command failed with exit code (\S+):\s*([^\r\n]+)/i);
+    const timedOut = text.match(/Command timed out:\s*([^\r\n]+)/i);
+    if (!failed && !timedOut) return '';
+
+    const outputMarker = text.match(/Last command output:\s*\r?\n/i);
+    let output = outputMarker ? text.slice(outputMarker.index + outputMarker[0].length) : '';
+    const stackStart = output.search(/\r?\n\s+at finish \(/i);
+    if (stackStart >= 0) output = output.slice(0, stackStart);
+    const outputLines = output.split(/\r?\n/);
+    const details = summarizeCommandOutput(outputLines);
+    const logPath = text.match(/^Full command log:\s*(.+)$/im);
+    const summary = failed
+        ? `命令失败：${failed[2]}（退出码 ${failed[1]}）`
+        : `命令超时：${timedOut[1]}`;
+
+    return [
+        summary,
+        details ? `错误摘要：${details}` : '没有识别到具体错误行，请查看执行日志原文。',
+        logPath ? `完整日志：${logPath[1].trim()}` : '',
+    ].filter(Boolean).join('\n');
+}
+
+function summarizeCommandOutput(lines) {
+    const failures = [];
+    for (let index = 0; index < lines.length; index += 1) {
+        const match = lines[index].match(/^\s*not ok \d+\s*-\s*(.+)$/i);
+        if (!match) continue;
+
+        const nextFailure = lines.findIndex((line, nextIndex) => nextIndex > index && /^\s*not ok \d+\s*-\s*/i.test(line));
+        const block = lines.slice(index + 1, nextFailure >= 0 ? nextFailure : Math.min(lines.length, index + 32));
+        const errorIndex = block.findIndex(line => /^\s*error:\s*/i.test(line));
+        let errorMessage = '';
+        if (errorIndex >= 0) {
+            const errorLine = block[errorIndex];
+            const errorMatch = errorLine.match(/^(\s*)error:\s*(.*)$/i);
+            errorMessage = cleanDiagnostic(errorMatch[2]);
+            if (!errorMessage || /^(?:\|-?|>)$/.test(errorMessage)) {
+                const indent = errorMatch[1].length + 2;
+                errorMessage = block.slice(errorIndex + 1)
+                    .filter(line => line.trim() && line.length - line.trimStart().length >= indent)
+                    .map(line => line.trim())
+                    .filter(line => !/^at\s/.test(line))
+                    .slice(0, 2)
+                    .join('; ');
+            }
+        }
+        const failureCode = block.find(line => /^\s*code:\s*/i.test(line));
+        const code = failureCode ? cleanDiagnostic(failureCode.replace(/^\s*code:\s*/i, '')) : '';
+        failures.push(`${match[1].trim()}${errorMessage ? `：${errorMessage}` : code ? `（${code}）` : ''}`);
+        if (failures.length >= 3) break;
+    }
+    if (failures.length) return failures.join('；').slice(0, 900);
+
+    const diagnostics = lines.map(line => line.trim()).filter(Boolean);
+    const preferred = diagnostics.filter(line =>
+        /\b(?:error TS\d+:|TS\d+: error|npm ERR!|npm error|Error:|TypeError:|SyntaxError:|FAIL(?:ED)?\b)/i.test(line)
+        && !/^at\s/.test(line),
+    );
+    const candidates = preferred.length ? preferred : diagnostics.filter(line =>
+        !/^(?:TAP version\b|# duration_ms\b|# (?:tests|pass|fail|cancelled|skipped)\b|> |npm (?:warn|notice)\b)/i.test(line)
+        && !/^at\s/.test(line)
+        && !/^Command failed with exit code/i.test(line),
+    );
+    return candidates.slice(0, 3).map(cleanDiagnostic).filter(Boolean).join('; ').slice(0, 900);
+}
+
+function cleanDiagnostic(value) {
+    return String(value || '')
+        .trim()
+        .replace(/^['"]|['"]$/g, '')
+        .replace(/\s+/g, ' ');
 }
 
 function resolveConfiguredPath(root, value) {
@@ -422,7 +514,7 @@ function resolveConfiguredPath(root, value) {
 
 function readCompletion(root, mode, environment) {
     if (mode === 'validate') {
-        return { mode, environment, title: '配置校验已完成' };
+        return { mode, environment, title: '打包前检查已完成' };
     }
 
     const raw = readConfig(root).value;
@@ -443,7 +535,7 @@ function readCompletion(root, mode, environment) {
         mode,
         environment,
         title: mode === 'base-apk'
-            ? `渠道 APK 与同步资源打包已完成（${archive.apkPaths?.length || 1} 个）`
+            ? `渠道 APK 与 Android native 符号归档已完成（${archive.nativeDebugSymbolsPaths?.length || 0} 个）`
             : (mode === 'bundle' ? '选中 Bundle 打包已完成' : '资源包打包已完成'),
         releaseId: completed.releaseId || '',
         apkPath,
@@ -455,6 +547,7 @@ function readCompletion(root, mode, environment) {
         archiveHotfixDirectory: archive.hotfixDirectory || '',
         archiveApkPath: archive.apkPath || '',
         archiveApkPaths: archive.apkPaths || [],
+        archiveNativeDebugSymbolsPaths: archive.nativeDebugSymbolsPaths || [],
         componentReleaseFile: componentRelease && (archive.componentReleaseFile || componentRelease.releaseFile) || '',
         changedComponents: componentRelease && componentRelease.changedComponents || [],
         componentUploadPaths: componentRelease && publishDirectory.bundleDirectories || [],
@@ -539,6 +632,10 @@ function appendCompletionLogs(completion) {
     }
     if (completion.archiveHotfixDirectory) appendLog('归档', `热更归档：${completion.archiveHotfixDirectory}`);
     if (completion.archiveApkPath) appendLog('归档', `APK 归档：${completion.archiveApkPath}`);
+    completion.archiveNativeDebugSymbolsPaths?.forEach(item => appendLog(
+        '归档',
+        `渠道 ${item.channelId} ARM64 native 符号：${item.path}；Build ID ${item.buildId}；SHA-256 ${item.sha256}`,
+    ));
 }
 
 async function runPipeline(input = {}) {
@@ -551,10 +648,23 @@ async function runPipeline(input = {}) {
     const environment = ['dev', 'test', 'prod'].includes(input.environment) ? input.environment : 'dev';
     const runCreatorHere = mode !== 'validate' && input.dryRun !== true
         && input.resume !== true && input.skipCreator !== true;
+    const skipChecks = input.skipChecks === true;
 
     activeOperation = true;
     setState({ status: `执行 ${mode}`, busy: true, completion: null, logs: [], error: '' });
     try {
+        if (runCreatorHere && !skipChecks) {
+            const preflightArgs = createCliArgs(cliPath, configPath, mode, environment, {
+                ...input,
+                dryRun: true,
+                preflightOnly: true,
+                skipChecks: false,
+            }, true);
+            setState({ status: 'Creator 构建前检查中' });
+            appendLog('检查', '运行配置的打包前门禁');
+            await runCli(root, preflightArgs, environment);
+            appendLog('检查', '打包前门禁通过');
+        }
         if (runCreatorHere) {
             await runCreatorInCurrentEditor(
                 root,
@@ -566,6 +676,7 @@ async function runPipeline(input = {}) {
             );
         }
         const args = createCliArgs(cliPath, configPath, mode, environment, input, runCreatorHere || input.skipCreator === true);
+        if (runCreatorHere && !skipChecks) args.push('--skip-checks');
         setState({ status: runCreatorHere ? '生成发布文件' : `执行 ${mode}` });
         await runCli(root, args, environment);
         if (mode === 'base-apk') clearVersionOverrides(root, environment, {
@@ -666,7 +777,7 @@ async function runWebRelease(input = {}) {
     if (!packageJson.scripts || !packageJson.scripts[release.script]) {
         throw new Error(`当前项目未配置 npm 命令：${release.script}`);
     }
-    const web = inspectWebRelease(root, environment);
+    const web = inspectWebReleaseState(root, environment);
     setState({ web });
     if (!web.valid) {
         throw new Error(`Web 打包配置检查失败：${web.errors[0]}`);
@@ -699,7 +810,7 @@ async function runWebRelease(input = {}) {
 
 function inspectCurrentWebRelease(environment) {
     const root = projectRoot();
-    const web = inspectWebRelease(root, String(environment || 'dev'));
+    const web = inspectWebReleaseState(root, String(environment || 'dev'));
     return setState({ web, error: web.valid ? '' : web.errors[0] });
 }
 
@@ -707,7 +818,9 @@ function saveCurrentWebRelease(input = {}) {
     const root = projectRoot();
     const environment = String(input.environment || 'dev');
     try {
-        const web = saveWebReleaseSettings(root, environment, input.settings || {});
+        const settings = input.settings || {};
+        const web = saveWebReleaseSettings(root, environment, settings);
+        web.embedWebDebugger = shouldEmbedWebDebugger(environment);
         return setState({ web, status: `${web.label} Web 配置已保存`, error: '' });
     } catch (error) {
         setState({ status: 'Web 配置保存失败', error: errorText(error) });
@@ -720,7 +833,7 @@ function replaceCurrentWebShareImage(input = {}) {
     const environment = String(input.environment || 'dev');
     try {
         replaceWebShareImage(root, input.dataUrl);
-        const web = inspectWebRelease(root, environment);
+        const web = inspectWebReleaseState(root, environment);
         return setState({ web, status: '分享图片已替换为 invite.jpg', error: '' });
     } catch (error) {
         setState({ status: '分享图片替换失败', error: errorText(error) });

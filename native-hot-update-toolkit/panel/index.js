@@ -34,7 +34,7 @@ exports.template = [
   '      <div id="buildSummary" class="summary"></div>',
   '      <div class="section-title">发布版本</div>',
   '      <div class="form-grid">',
-  '        <label>资源热更版本（1001～9999）<input id="releaseSequence" type="number" min="1001" max="9999" step="1"></label>',
+  '        <label>资源热更版本（1～9999）<input id="releaseSequence" type="number" min="1" max="9999" step="1"></label>',
   '        <div class="version-confirm"><ui-button id="confirmReleaseSequence" class="primary">确定热更序号</ui-button><span id="releaseSequenceStatus">修改后请点确定</span></div>',
   '      </div>',
   '      <div class="section-title">当前环境</div>',
@@ -70,7 +70,7 @@ exports.template = [
   '        <label class="span-2">长期归档根目录（archiveRoot）<input id="archiveRoot" type="text"></label>',
   '      </div>',
   '      <div id="configPath" class="path-line"></div>',
-  '      <div class="action-row"><ui-button id="validate">校验公共配置（不构建）</ui-button></div>',
+  '      <div class="action-row"><ui-button id="validate">打包前检查（不构建）</ui-button></div>',
   '    </section>',
   '    <section id="base" class="page">',
   '      <div id="baseSummary" class="summary"></div>',
@@ -145,6 +145,8 @@ exports.template = [
   '  <section id="webWorkspace" class="workspace web-workspace">',
   '    <div class="section-title">关键 SDK 配置</div>',
   '    <div id="webSummary" class="summary"></div>',
+  '    <div class="section-title">手机端调试</div>',
+  '    <label class="web-debug-option"><input id="webEmbedDebugger" type="checkbox"><span><strong>Web 包嵌入调试控制台</strong><small>开发和测试环境强制开启；正式环境强制关闭，即使手动选中也不会进入构建包。地址带 debug=1 才会输出日志。</small></span></label>',
   '    <div class="form-grid web-key-config">',
   '      <label class="span-2">Google 登录 Client ID<input id="webGoogleClientId" type="text"></label>',
   '      <label>LiveChat ID<input id="webLiveChatId" type="text" inputmode="numeric"></label>',
@@ -194,7 +196,7 @@ exports.style = [
   'h1{margin:0;font-size:17px;letter-spacing:0}.status{display:block;margin-top:3px;color:rgba(255,255,255,.62)}',
   '.environment{display:flex;align-items:center;gap:8px}.environment select{flex:1}.top-actions,.release-toolbar,.run-options,.toggle-row,.log-head,.action-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
   '.workspace-tabs{display:flex;gap:4px;padding:8px 12px 0;border-bottom:1px solid rgba(255,255,255,.1)}.workspace-tab{padding:10px 16px;border:1px solid rgba(255,255,255,.12);border-bottom:0;color:rgba(255,255,255,.68);background:rgba(255,255,255,.035);cursor:pointer}.workspace-tab.active{color:#fff;background:rgba(85,169,209,.2);border-color:rgba(85,169,209,.55)}',
-  '.workspace{display:none;min-width:0;min-height:0;flex:1}.workspace.active{display:flex}.android-workspace{flex-direction:column}.web-workspace{box-sizing:border-box;flex-direction:column;overflow:auto;padding:16px}.web-key-config{margin-top:12px}.web-meta-scroll{padding:2px 10px 10px 2px}.web-meta-scroll textarea{min-height:64px;padding:8px;resize:vertical}.web-action-bar{display:none;flex:0 0 auto;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid rgba(255,255,255,.1);background:var(--color-normal-fill)}.web-action-bar.active{display:flex}',
+  '.workspace{display:none;min-width:0;min-height:0;flex:1}.workspace.active{display:flex}.android-workspace{flex-direction:column}.web-workspace{box-sizing:border-box;flex-direction:column;overflow:auto;padding:16px}.web-key-config{margin-top:12px}.web-meta-scroll{padding:2px 10px 10px 2px}.web-meta-scroll textarea{min-height:64px;padding:8px;resize:vertical}.web-debug-option{display:flex;align-items:flex-start;gap:9px;max-width:620px;padding:10px 12px;border:1px solid rgba(85,169,209,.35);background:rgba(255,255,255,.025)}.web-debug-option input{width:16px;height:16px;margin:2px 0 0;flex:0 0 16px}.web-debug-option span{display:flex;flex-direction:column;gap:5px}.web-debug-option small{color:rgba(255,255,255,.62);line-height:1.5}.web-action-bar{display:none;flex:0 0 auto;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid rgba(255,255,255,.1);background:var(--color-normal-fill)}.web-action-bar.active{display:flex}',
   '.web-share-image-drop{display:grid;grid-template-columns:minmax(220px,420px) minmax(180px,1fr);min-height:150px;align-items:center;gap:14px;padding:10px;border:1px dashed rgba(85,169,209,.55);background:rgba(255,255,255,.025);cursor:pointer}.web-share-image-drop.dragging{border-color:#8ed3f3;background:rgba(85,169,209,.1)}.web-share-image-drop img{display:block;width:100%;height:150px;object-fit:contain;background:rgba(0,0,0,.22)}.web-share-image-hint{display:flex;min-width:0;flex-direction:column;gap:6px}.web-share-image-hint span{color:rgba(255,255,255,.6);overflow-wrap:anywhere}',
   '.tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid rgba(255,255,255,.1);flex-wrap:wrap}',
   '.tab{padding:10px 13px;border:0;border-bottom:2px solid transparent;color:rgba(255,255,255,.65);background:transparent;cursor:pointer}.tab.active{color:#fff;border-bottom-color:#55a9d1}',
@@ -240,7 +242,7 @@ exports.$ = {
   artifactRoot: '#artifactRoot', archiveRoot: '#archiveRoot', hotfixMode: '#hotfixMode', configPath: '#configPath', releaseSelect: '#releaseSelect', releaseFile: '#releaseFile',
   reloadReleases: '#reloadReleases', openRelease: '#openRelease', releaseSummary: '#releaseSummary', releaseJson: '#releaseJson', error: '#error', logResizeHandle: '#logResizeHandle',
   openPublishDirectory: '#openPublishDirectory', copyVersionManifest: '#copyVersionManifest', copyBackendJson: '#copyBackendJson',
-  webSummary: '#webSummary', webSave: '#webSave', webBuild: '#webBuild',
+  webSummary: '#webSummary', webSave: '#webSave', webBuild: '#webBuild', webEmbedDebugger: '#webEmbedDebugger',
   webGoogleClientId: '#webGoogleClientId', webLiveChatId: '#webLiveChatId', webFacebookAppId: '#webFacebookAppId', webThinkingDataAppId: '#webThinkingDataAppId',
   webTitle: '#webTitle', webDescription: '#webDescription', webOgTitle: '#webOgTitle', webOgDescription: '#webOgDescription', webOgImage: '#webOgImage',
   webTwitterTitle: '#webTwitterTitle', webTwitterDescription: '#webTwitterDescription', webTwitterImage: '#webTwitterImage',
@@ -303,7 +305,7 @@ function setVersionFieldsManaged(panel, environment, managed) {
   panel.$.releaseSequence.disabled = productionManaged;
   panel.$.confirmReleaseSequence.disabled = productionManaged;
   panel.$.releaseSequence.title = productionManaged
-    ? (managed ? '正式服根据上次成功发布自动加 1' : '正式服首次固定从 1001 开始')
+    ? (managed ? '正式服根据上次成功发布自动加 1' : '正式服首次从 1 开始')
     : (managed ? '建议值为上次成功发布 +1，可自由修改' : '可自由指定热更序号');
   panel.$.versionCode.disabled = false;
   panel.$.versionCode.title = managed ? '建议值为上次成功版本 +1，可自由修改并按填写值构建' : '可自由指定 APK versionCode';
@@ -423,9 +425,12 @@ function renderWebRelease(panel, web) {
     setValue(panel, 'webTwitterTitle', settings.twitterTitle);
     setValue(panel, 'webTwitterDescription', settings.twitterDescription);
     setValue(panel, 'webTwitterImage', settings.twitterImage);
+    setChecked(panel, 'webEmbedDebugger', web.embedWebDebugger);
     webFormEnvironment = web.environment;
     webFormDirty = false;
   }
+  panel.$.webEmbedDebugger.checked = web.embedWebDebugger === true;
+  panel.$.webEmbedDebugger.disabled = true;
   const shareImage = web.shareImage || {};
   if (shareImage.dataUrl) panel.$.webShareImagePreview.src = shareImage.dataUrl;
   else panel.$.webShareImagePreview.removeAttribute('src');
@@ -436,7 +441,8 @@ function renderWebRelease(panel, web) {
   panel.$.webSummary.textContent = [
     '当前环境：' + web.label,
     '打包命令：' + web.command,
-    firstError ? '需要处理：' + firstError : '配置状态：可打包'
+    firstError ? '需要处理：' + firstError : '配置状态：可打包',
+    '手机端调试控制台：' + (web.embedWebDebugger ? '当前环境强制开启' : '正式环境强制关闭')
   ].join('\n');
 }
 
@@ -454,12 +460,12 @@ function readWebForm(panel) {
     facebookAppId: panel.$.webFacebookAppId.value.trim(),
     thinkingDataAppId: panel.$.webThinkingDataAppId.value.trim(),
     title: panel.$.webTitle.value.trim(),
-    description: panel.$.webDescription.value.trim(),
+    description: panel.$.webDescription.value,
     ogTitle: panel.$.webOgTitle.value.trim(),
-    ogDescription: panel.$.webOgDescription.value.trim(),
+    ogDescription: panel.$.webOgDescription.value,
     ogImage: panel.$.webOgImage.value.trim(),
     twitterTitle: panel.$.webTwitterTitle.value.trim(),
-    twitterDescription: panel.$.webTwitterDescription.value.trim(),
+    twitterDescription: panel.$.webTwitterDescription.value,
     twitterImage: panel.$.webTwitterImage.value.trim()
   };
 }
@@ -597,7 +603,12 @@ function renderState(panel) {
     completion.archiveHotfixDirectory ? '热更归档：' + completion.archiveHotfixDirectory : '',
     completion.archiveApkPaths && completion.archiveApkPaths.length
       ? '渠道 APK：\n' + completion.archiveApkPaths.map(function (item) { return item.channelId + '：' + item.path; }).join('\n')
-      : (completion.archiveApkPath ? 'APK 归档：' + completion.archiveApkPath : '')
+      : (completion.archiveApkPath ? 'APK 归档：' + completion.archiveApkPath : ''),
+    completion.archiveNativeDebugSymbolsPaths && completion.archiveNativeDebugSymbolsPaths.length
+      ? 'ARM64 native 符号（FULL）：\n' + completion.archiveNativeDebugSymbolsPaths.map(function (item) {
+        return item.channelId + '：' + item.path + '\n  Build ID：' + item.buildId + '\n  SHA-256：' + item.sha256;
+      }).join('\n')
+      : ''
   ].filter(Boolean).join('\n') : '';
   panel.$.openApkResult.style.display = completion && completion.apkDirectory ? 'inline-flex' : 'none';
   panel.$.openHotUpdateResult.style.display = completion && completion.hotUpdateRoot ? 'inline-flex' : 'none';
@@ -966,6 +977,7 @@ exports.ready = async function ready() {
   this.$.validate.addEventListener('confirm', function () { void runMode(panel, 'validate', { dryRun: true }); });
   this.$.webSave.addEventListener('confirm', function () { void saveWebRelease(panel); });
   this.$.webBuild.addEventListener('confirm', function () { void runWebRelease(panel); });
+  this.$.webEmbedDebugger.addEventListener('change', function () { webFormDirty = true; });
   this.$.buildResources.addEventListener('confirm', function () {
     void runMode(panel, 'resources', {
       selectedBundles: ['base'].concat(selectedBundles(panel, 'resourceBundleSelection'))

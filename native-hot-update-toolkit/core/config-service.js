@@ -41,7 +41,7 @@ function summarizeConfig(projectRoot) {
     const versionOverrides = value.versionOverrides || {};
     const environments = Object.fromEntries(Object.entries(value.environments || {}).map(([name, item]) => [name, {
         releaseSequence: name === 'prod'
-            ? nextReleaseSequence(releaseState.environments && releaseState.environments[name], 1001)
+            ? nextReleaseSequence(releaseState.environments && releaseState.environments[name], 1)
             : hotfixSequenceOrDefault(
                 versionOverrides[name] && versionOverrides[name].releaseSequence,
                 nextReleaseSequence(releaseState.environments && releaseState.environments[name], item.releaseSequence || value.releaseSequence),
@@ -312,27 +312,27 @@ function positiveIntegerOrDefault(value, fallback) {
 
 function nextReleaseSequence(previous, configured) {
     const previousSequence = Number(previous && previous.releaseSequence);
-    return Number.isSafeInteger(previousSequence) && previousSequence >= 1001 && previousSequence <= 9999
+    return Number.isSafeInteger(previousSequence) && previousSequence >= 1 && previousSequence <= 9999
         ? previousSequence + 1
-        : hotfixSequenceOrDefault(configured, 1001);
+        : hotfixSequenceOrDefault(configured, 1);
 }
 
 function hotfixSequence(value, label) {
     const number = Number(value);
-    if (!Number.isSafeInteger(number) || number < 1001 || number > 9999) {
-        throw new Error(`${label} must be a four-digit integer from 1001 to 9999`);
+    if (!Number.isSafeInteger(number) || number < 1 || number > 9999) {
+        throw new Error(`${label} must be an integer from 1 to 9999`);
     }
     return number;
 }
 
 function hotfixSequenceOrDefault(value, fallback) {
     const number = Number(value);
-    return Number.isSafeInteger(number) && number >= 1001 && number <= 9999 ? number : fallback;
+    return Number.isSafeInteger(number) && number >= 1 && number <= 9999 ? number : fallback;
 }
 
 function validHotfixSequence(value) {
     const number = Number(value);
-    return Number.isSafeInteger(number) && number >= 1001 && number <= 9999 ? number : 0;
+    return Number.isSafeInteger(number) && number >= 1 && number <= 9999 ? number : 0;
 }
 
 function nextVersionCode(previous, configured) {
