@@ -23,8 +23,8 @@
   "contributions": {
     "menu": [
       {
-        "path": "项目工具",
-        "label": "热更新",
+        "path": "项目发布",
+        "label": "打开发布中心",
         "message": "open-panel"
       }
     ],
