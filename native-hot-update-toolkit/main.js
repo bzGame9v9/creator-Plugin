@@ -125,13 +125,14 @@ function createCliArgs(cliPath, configPath, mode, environment, input, skipCreato
     if ((mode === 'bundle' || mode === 'resources') && Array.isArray(input.selectedBundles) && input.selectedBundles.length) {
         args.push('--bundles', input.selectedBundles.join(','));
     }
+    if (mode === 'base-apk' && input.apkTarget) args.push('--apk-target', input.apkTarget);
     if (mode === 'base-apk' && Array.isArray(input.channels) && input.channels.length) {
         args.push('--channels', input.channels.join(','));
     }
     return args;
 }
 
-function createEditorBuildPlan(root, configPath, mode, environment, selectedBundles = [], channels = []) {
+function createEditorBuildPlan(root, configPath, mode, environment, selectedBundles = [], channels = [], apkTarget = 'channels') {
     const androidReleaseRoot = resolveToolPaths(root).androidRelease;
     const configModulePath = path.join(androidReleaseRoot, 'lib', 'config.js');
     const creatorModulePath = path.join(androidReleaseRoot, 'lib', 'creator-config.js');
@@ -140,7 +141,7 @@ function createEditorBuildPlan(root, configPath, mode, environment, selectedBund
     }
     const { loadPipelineConfig } = require(configModulePath);
     const { createCreatorBuildConfig } = require(creatorModulePath);
-    const context = loadPipelineConfig(configPath, { mode, environment, selectedBundles, channels });
+    const context = loadPipelineConfig(configPath, { mode, environment, selectedBundles, channels, apkTarget });
     const creatorLogPath = path.join(context.reportDir, 'creator-build.log');
     fs.mkdirSync(context.reportDir, { recursive: true });
     const buildOptions = createCreatorBuildConfig(context);
@@ -224,11 +225,11 @@ function appendCreatorLogFile(logPath) {
     }
 }
 
-async function runCreatorInCurrentEditor(root, configPath, mode, environment, selectedBundles = [], channels = []) {
+async function runCreatorInCurrentEditor(root, configPath, mode, environment, selectedBundles = [], channels = [], apkTarget = 'channels') {
     if (!global.Editor || !Editor.Message || typeof Editor.Message.request !== 'function') {
         throw new Error('当前 Creator 消息服务不可用，无法执行编辑器内构建');
     }
-    const plan = createEditorBuildPlan(root, configPath, mode, environment, selectedBundles, channels);
+    const plan = createEditorBuildPlan(root, configPath, mode, environment, selectedBundles, channels, apkTarget);
     appendLog('Creator', mode === 'bundle'
         ? `使用 Creator 官方 Bundle 构建：${selectedBundles.join(', ')}`
         : (mode === 'base-apk' ? '使用 Creator 官方构建生成基础 APK data' : '使用 Creator 官方构建生成全部资源'));
@@ -528,14 +529,16 @@ function readCompletion(root, mode, environment) {
 
     const apkPath = mode === 'base-apk' && completed.apk && completed.apk.path || '';
     const nativeUpdateFiles = completed.backendConfig && completed.backendConfig.channelVariants || {};
+    const apkTarget = completed.lastOperation && completed.lastOperation.apkTarget || 'channels';
     const archive = completed.archive || {};
     const publishDirectory = completed.publishDirectory || {};
     const componentRelease = completed.componentRelease || null;
     return {
         mode,
+        apkTarget,
         environment,
         title: mode === 'base-apk'
-            ? `渠道 APK 与 Android native 符号归档已完成（${archive.nativeDebugSymbolsPaths?.length || 0} 个）`
+            ? `${apkTarget === 'main' ? '主 APK' : '渠道 APK'} 与 Android native 符号归档已完成（${archive.nativeDebugSymbolsPaths?.length || 0} 个）`
             : (mode === 'bundle' ? '选中 Bundle 打包已完成' : '资源包打包已完成'),
         releaseId: completed.releaseId || '',
         apkPath,
@@ -617,8 +620,11 @@ function resolvePublishArtifacts(root, raw) {
 
 function appendCompletionLogs(completion) {
     appendLog('完成', completion.title);
-    if (completion.apkPath) appendLog('完成', `基础 APK：${completion.apkPath}`);
-    completion.archiveApkPaths?.forEach(item => appendLog('完成', `渠道 ${item.channelId}：${item.path}`));
+    if (completion.apkPath) appendLog('完成', `${completion.apkTarget === 'main' ? '主 APK' : '基础 APK'}：${completion.apkPath}`);
+    completion.archiveApkPaths?.forEach(item => appendLog(
+        '完成',
+        item.apkTarget === 'main' ? `主 APK：${item.path}` : `渠道 ${item.channelId}：${item.path}`,
+    ));
     if (completion.nativeUpdateFile) appendLog('完成', `后台更新配置：${completion.nativeUpdateFile}`);
     Object.entries(completion.nativeUpdateFiles || {}).forEach(([channelId, file]) => {
         appendLog('完成', `渠道 ${channelId} 后台配置：${file}`);
@@ -634,7 +640,7 @@ function appendCompletionLogs(completion) {
     if (completion.archiveApkPath) appendLog('归档', `APK 归档：${completion.archiveApkPath}`);
     completion.archiveNativeDebugSymbolsPaths?.forEach(item => appendLog(
         '归档',
-        `渠道 ${item.channelId} ARM64 native 符号：${item.path}；Build ID ${item.buildId}；SHA-256 ${item.sha256}`,
+        `${item.apkTarget === 'main' ? '主 APK' : `渠道 ${item.channelId}`} ARM64 native 符号：${item.path}；Build ID ${item.buildId}；SHA-256 ${item.sha256}`,
     ));
 }
 
@@ -673,6 +679,7 @@ async function runPipeline(input = {}) {
                 environment,
                 input.selectedBundles || [],
                 input.channels || [],
+                input.apkTarget || 'channels',
             );
         }
         const args = createCliArgs(cliPath, configPath, mode, environment, input, runCreatorHere || input.skipCreator === true);

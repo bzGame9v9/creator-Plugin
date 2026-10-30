@@ -79,8 +79,11 @@ exports.template = [
   '        <label>APK versionCode（同时作为 Android 显示版本）<input id="versionCode" type="number" min="1" step="1"></label>',
   '      </div>',
   '      <div class="version-confirm"><ui-button id="confirmApkVersion" class="primary">确定 APK 版本</ui-button><span id="apkVersionStatus">修改后请点确定</span></div>',
-  '      <div class="section-title">渠道包</div>',
-  '      <div class="summary">一次构建共用当前 versionCode；Creator 资源只构建一次，再为每个选中渠道分别生成 APK。</div>',
+  '      <div class="section-title">主 APK</div>',
+  '      <div class="summary">主 APK 不写入渠道号，适合作为网页渠道包生成器的输入；网页工具只向 APK Signing Block 写入 Walle 渠道元数据。</div>',
+  '      <div class="action-row"><ui-button id="mainApk" class="primary">生成主 APK + 同步资源</ui-button><ui-button id="resumeMain">恢复主 APK</ui-button></div>',
+  '      <div class="section-title">渠道 APK</div>',
+  '      <div class="summary">直接按渠道构建时，插件通过 Walle 向 APK Signing Block 写入渠道号，与网页生成器使用相同格式并保留 APK 原签名。</div>',
   '      <div class="action-row compact"><ui-button id="selectAllChannels">全选渠道</ui-button><ui-button id="clearChannels">清空</ui-button></div>',
   '      <div id="channelSelection" class="bundle-selection channel-selection"></div>',
   '      <div id="channelConfigPath" class="path-line"></div>',
@@ -97,7 +100,7 @@ exports.template = [
   '      <div class="toggle-row"><label><input type="checkbox" checked disabled>空包 APK 强制同步生成资源包与最新 Manifest</label></div>',
   '      <div class="section-title">基础包执行选项</div>',
   '      <div class="run-options"><label class="option-with-help"><input id="baseSkipChecks" type="checkbox"><span>跳过发布前检查</span><span class="help-tip" tabindex="0" data-tooltip="跳过配置中 checks 列出的代码、Bundle 边界、类型和热更测试，仅节省检查时间，不会跳过 Creator 构建或 Gradle。只适合本轮检查已通过且检查后代码与资源没有变化的情况；正式出包不建议勾选。">i</span></label><label class="option-with-help"><input id="baseSkipCreator" type="checkbox"><span>复用已有 Creator data</span><span class="help-tip" tabindex="0" data-tooltip="不再调用 Creator 构建资源，直接使用 build/android/data 和现有 Android 工程继续生成 APK。只适合刚完成一次成功 Creator 构建，且源码、资源、Bundle 配置、包名和构建选项都未变化的情况；目录被删除、构建中断或内容陈旧时严禁勾选。">i</span></label></div>',
-  '      <div class="action-row"><ui-button id="baseApk" class="danger">生成渠道 APK + 同步资源</ui-button><ui-button id="resume">恢复渠道包</ui-button></div>',
+  '      <div class="action-row"><ui-button id="baseApk" class="danger">生成选中渠道 APK + 同步资源</ui-button><ui-button id="resume">恢复渠道 APK</ui-button></div>',
   '    </section>',
   '    <section id="resources" class="page">',
   '      <div id="resourceSummary" class="summary"></div>',
@@ -226,7 +229,7 @@ exports.$ = {
   status: '#status', environment: '#environment', saveConfig: '#saveConfig', refresh: '#refresh',
   confirmReleaseSequence: '#confirmReleaseSequence', releaseSequenceStatus: '#releaseSequenceStatus', confirmApkVersion: '#confirmApkVersion', apkVersionStatus: '#apkVersionStatus',
   workspaceTabs: '#workspaceTabs', androidWorkspace: '#androidWorkspace', webWorkspace: '#webWorkspace', webActionBar: '#webActionBar',
-  tabs: '#tabs', pages: '#pages', validate: '#validate', buildResources: '#buildResources', buildSelectedBundles: '#buildSelectedBundles', baseApk: '#baseApk', resume: '#resume', stop: '#stop',
+  tabs: '#tabs', pages: '#pages', validate: '#validate', buildResources: '#buildResources', buildSelectedBundles: '#buildSelectedBundles', baseApk: '#baseApk', resume: '#resume', mainApk: '#mainApk', resumeMain: '#resumeMain', stop: '#stop',
   selectAllApkBundles: '#selectAllApkBundles', clearApkBundles: '#clearApkBundles', selectAllResourceBundles: '#selectAllResourceBundles', clearResourceBundles: '#clearResourceBundles', selectAllBundles: '#selectAllBundles', clearBundles: '#clearBundles',
   selectAllChannels: '#selectAllChannels', clearChannels: '#clearChannels', channelSelection: '#channelSelection', channelConfigPath: '#channelConfigPath',
   baseSkipChecks: '#baseSkipChecks', baseSkipCreator: '#baseSkipCreator', resourceSkipChecks: '#resourceSkipChecks', resourceSkipCreator: '#resourceSkipCreator', bundleSkipChecks: '#bundleSkipChecks', bundleSkipCreator: '#bundleSkipCreator',
@@ -531,6 +534,8 @@ function renderState(panel) {
   panel.$.buildSelectedBundles.disabled = !!state.busy;
   panel.$.baseApk.disabled = !!state.busy;
   panel.$.resume.disabled = !!state.busy;
+  panel.$.mainApk.disabled = !!state.busy;
+  panel.$.resumeMain.disabled = !!state.busy;
   panel.$.webSave.disabled = !!state.busy;
   panel.$.webBuild.disabled = !!state.busy;
   const config = state.config;
@@ -551,7 +556,7 @@ function renderState(panel) {
       '本次 APK：versionCode ' + config.versionCode + '（Android 显示版本 ' + config.versionCode + '）' +
         (config.previousVersionCode ? '，上次 ' + config.previousVersionCode : ''),
       '同步资源版本：' + config.releaseId + '（空包 APK 强制生成）',
-      '默认渠道：' + ((config.channelConfig && config.channelConfig.defaultChannels || []).join(', ') || '未配置'),
+      '主 APK 不带渠道号；渠道 APK 通过 Walle 写入 APK Signing Block，并保留原签名',
       'APK 内容：base' + (Object.keys(config.bundles || {}).filter(function (name) {
         return config.bundles[name].includeInApk;
       }).map(function (name) { return ' + ' + name; }).join('')),
@@ -591,7 +596,7 @@ function renderState(panel) {
   panel.$.completionResult.style.display = completion && !completionDismissed ? 'flex' : 'none';
   panel.$.completionTitle.textContent = completion && completion.title || '';
   panel.$.completionPaths.textContent = completion ? [
-    completion.apkPath ? '基础 APK：' + completion.apkPath : '',
+    completion.apkPath ? (completion.apkTarget === 'main' ? '主 APK（网页渠道生成器输入）：' : '基础 APK：') + completion.apkPath : '',
     completion.nativeUpdateFile ? '后台更新配置：' + completion.nativeUpdateFile : '',
     completion.nativeUpdateFiles && Object.keys(completion.nativeUpdateFiles).length
       ? '渠道后台配置：\n' + Object.keys(completion.nativeUpdateFiles).map(function (channelId) { return channelId + '：' + completion.nativeUpdateFiles[channelId]; }).join('\n')
@@ -602,11 +607,13 @@ function renderState(panel) {
     completion.publishDirectoryRoot ? '本次完整发布目录：' + completion.publishDirectoryRoot : '',
     completion.archiveHotfixDirectory ? '热更归档：' + completion.archiveHotfixDirectory : '',
     completion.archiveApkPaths && completion.archiveApkPaths.length
-      ? '渠道 APK：\n' + completion.archiveApkPaths.map(function (item) { return item.channelId + '：' + item.path; }).join('\n')
+      ? (completion.apkTarget === 'main' ? '主 APK：\n' : '渠道 APK：\n') + completion.archiveApkPaths.map(function (item) {
+        return item.apkTarget === 'main' ? item.path : item.channelId + '：' + item.path;
+      }).join('\n')
       : (completion.archiveApkPath ? 'APK 归档：' + completion.archiveApkPath : ''),
     completion.archiveNativeDebugSymbolsPaths && completion.archiveNativeDebugSymbolsPaths.length
       ? 'ARM64 native 符号（FULL）：\n' + completion.archiveNativeDebugSymbolsPaths.map(function (item) {
-        return item.channelId + '：' + item.path + '\n  Build ID：' + item.buildId + '\n  SHA-256：' + item.sha256;
+        return (item.apkTarget === 'main' ? '主 APK' : item.channelId) + '：' + item.path + '\n  Build ID：' + item.buildId + '\n  SHA-256：' + item.sha256;
       }).join('\n')
       : ''
   ].filter(Boolean).join('\n') : '';
@@ -1019,6 +1026,18 @@ exports.ready = async function ready() {
     Array.from(panel.$.resourceBundleSelection.querySelectorAll('input[data-bundle]')).forEach(function (input) { input.checked = false; });
   });
   this.$.useDebugKeystore.addEventListener('change', function () { syncAndroidSigningControls(panel); });
+  this.$.mainApk.addEventListener('confirm', function () {
+    void runMode(panel, 'base-apk', { apkTarget: 'main' }, {
+      skipChecks: panel.$.baseSkipChecks.checked,
+      skipCreator: panel.$.baseSkipCreator.checked
+    });
+  });
+  this.$.resumeMain.addEventListener('confirm', function () {
+    void runMode(panel, 'base-apk', { resume: true, apkTarget: 'main' }, {
+      skipChecks: panel.$.baseSkipChecks.checked,
+      skipCreator: panel.$.baseSkipCreator.checked
+    });
+  });
   this.$.selectAllChannels.addEventListener('confirm', function () {
     Array.from(panel.$.channelSelection.querySelectorAll('input[data-channel]')).forEach(function (input) {
       if (!input.disabled) input.checked = true;
@@ -1034,7 +1053,7 @@ exports.ready = async function ready() {
       renderState(panel);
       return;
     }
-    void runMode(panel, 'base-apk', { channels: channels }, {
+    void runMode(panel, 'base-apk', { apkTarget: 'channels', channels: channels }, {
       skipChecks: panel.$.baseSkipChecks.checked,
       skipCreator: panel.$.baseSkipCreator.checked
     });
@@ -1046,7 +1065,7 @@ exports.ready = async function ready() {
       renderState(panel);
       return;
     }
-    void runMode(panel, 'base-apk', { resume: true, channels: channels }, {
+    void runMode(panel, 'base-apk', { resume: true, apkTarget: 'channels', channels: channels }, {
       skipChecks: panel.$.baseSkipChecks.checked,
       skipCreator: panel.$.baseSkipCreator.checked
     });
