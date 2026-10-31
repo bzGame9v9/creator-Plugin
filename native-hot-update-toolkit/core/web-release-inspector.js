@@ -254,6 +254,8 @@ function inspectSdkConfig(projectRoot, environment, template, errors, warnings) 
 
 function inspectGoogleLogin(projectRoot, warnings) {
     const candidates = [
+        path.join(projectRoot, 'assets', 'bundles', 'login', 'script', 'login', 'ThirdPartyEvent.ts'),
+        path.join(projectRoot, 'assets', 'base', 'script', 'login', 'ThirdPartyEvent.ts'),
         path.join(projectRoot, 'assets', 'bundles', 'login', 'src', 'login', 'ThirdPartyEvent.ts'),
         path.join(projectRoot, 'assets', 'base', 'src', 'login', 'ThirdPartyEvent.ts'),
         path.join(projectRoot, 'assets', 'src', 'login', 'ThirdPartyEvent.ts'),

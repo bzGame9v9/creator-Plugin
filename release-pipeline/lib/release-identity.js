@@ -3,9 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const APP_VERSION_CONFIG = path.join('assets', 'base', 'src', 'Config.ts');
+const APP_VERSION_CONFIG = path.join('assets', 'base', 'script', 'Config.ts');
 const APP_VERSION_CONFIG_CANDIDATES = [
     APP_VERSION_CONFIG,
+    path.join('assets', 'base', 'src', 'Config.ts'),
     path.join('assets', 'src', 'Config.ts'),
 ];
 const RELEASE_ENVIRONMENTS = new Set(['development', 'test', 'production']);
