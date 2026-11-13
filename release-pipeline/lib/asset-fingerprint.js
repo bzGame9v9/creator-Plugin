@@ -318,7 +318,8 @@ function rewriteReferences(tree, renameMap) {
         }
         const source = buffer.toString('utf8');
         let output;
-        if (path.posix.extname(relative).toLowerCase() === '.json') {
+        const extension = path.posix.extname(relative).toLowerCase();
+        if (extension === '.json' || extension === '.webmanifest') {
             output = rewriteJson(source, relative, renameMap);
         } else {
             output = replaceTextReferences(source, relative, renameMap);
@@ -385,10 +386,99 @@ function rewriteJson(source, relative, renameMap) {
 
 function replaceTextReferences(source, relative, renameMap) {
     const replacements = createReferenceReplacementMap(relative, renameMap);
-    return source.replace(newAssetPattern(), (match, quote, reference) => {
-        const output = replaceReferenceValue(reference, replacements);
-        return output === reference ? match : `${quote}${output}${quote}`;
+    const extension = path.posix.extname(relative).toLowerCase();
+    if (extension === '.css') return replaceCssReferences(source, replacements);
+    if (isMarkupFile(extension)) return replaceMarkupReferences(source, replacements);
+    return replaceJavaScriptReferences(source, replacements);
+}
+
+function replaceMarkupReferences(source, replacements) {
+    return replaceOutsideHtmlComments(source, (segment) => {
+        let output = segment.replace(/<(?:script|link)\b[^>]*>/gi, (tag) => {
+            return tag.replace(/(\s)(src|href)\s*=\s*(["'])([^"']+)\3/gi, (match, spacing, name, quote, reference) => {
+                const next = replaceReferenceValue(reference, replacements);
+                return next === reference ? match : spacing + name + '=' + quote + next + quote;
+            });
+        });
+        output = output.replace(/(<script\b[^>]*>)([\s\S]*?)(<\/script\s*>)/gi, (_match, opening, body, closing) => {
+            return opening + replaceJavaScriptReferences(body, replacements) + closing;
+        });
+        output = output.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style\s*>)/gi, (_match, opening, body, closing) => {
+            return opening + replaceCssReferences(body, replacements) + closing;
+        });
+        return output;
     });
+}
+
+function replaceOutsideHtmlComments(source, transform) {
+    const comments = /<!--[\s\S]*?-->/g;
+    let output = '';
+    let cursor = 0;
+    let match;
+    while ((match = comments.exec(source))) {
+        output += transform(source.slice(cursor, match.index));
+        output += match[0];
+        cursor = match.index + match[0].length;
+    }
+    return output + transform(source.slice(cursor));
+}
+
+function replaceCssReferences(source, replacements) {
+    return source.replace(/\burl\(\s*(["'])([^"']+)\1\s*\)/gi, (match, quote, reference) => {
+        const next = replaceReferenceValue(reference, replacements);
+        return next === reference ? match : match.replace(reference, next);
+    });
+}
+
+function replaceJavaScriptReferences(source, replacements) {
+    const code = stripJavaScriptComments(source);
+    const edits = [];
+    getJavaScriptReferencePatterns().forEach((pattern) => {
+        collectReferenceEdits(code, pattern, replacements, edits);
+    });
+
+    // Anonymous System.register dependencies are real files; virtual module IDs are not.
+    const anonymousSystemRegister = /\bSystem\.register\s*\(\s*(\[[\s\S]*?\])\s*,/gi;
+    let registerMatch;
+    while ((registerMatch = anonymousSystemRegister.exec(code))) {
+        const dependencyStart = registerMatch.index + registerMatch[0].indexOf(registerMatch[1]);
+        collectReferenceEdits(registerMatch[1], newAssetPattern(), replacements, edits, dependencyStart);
+    }
+
+    const uniqueEdits = new Map();
+    edits.forEach((edit) => uniqueEdits.set(edit.start + ':' + edit.end, edit));
+    return Array.from(uniqueEdits.values())
+        .sort((left, right) => right.start - left.start)
+        .reduce((output, edit) => output.slice(0, edit.start) + edit.value + output.slice(edit.end), source);
+}
+
+function collectReferenceEdits(source, pattern, replacements, edits, sourceOffset = 0) {
+    let match;
+    while ((match = pattern.exec(source))) {
+        const quote = match[1];
+        const reference = match[2];
+        const next = replaceReferenceValue(reference, replacements);
+        if (next === reference) continue;
+        const start = sourceOffset + match.index + match[0].length - reference.length - quote.length;
+        edits.push({ start, end: start + reference.length, value: next });
+    }
+}
+
+function getJavaScriptReferencePatterns() {
+    const asset = QUOTED_ASSET_PATTERN.source;
+    return [
+        // Cocos' top-level entry uses System.import and generated modules use e.import.
+        new RegExp('\\bimport\\s*\\(\\s*' + asset, 'gi'),
+        new RegExp('\\b(?:import|export)\\s+(?:[^\'"\\x60;\\n]+?\\s+from\\s+)?' + asset, 'gi'),
+        new RegExp('\\b(?:fetch|importScripts|require)\\s*\\(\\s*' + asset, 'gi'),
+        new RegExp('(?:navigator\\.)?serviceWorker\\.register\\s*\\(\\s*' + asset, 'gi'),
+        new RegExp('\\bnew\\s+(?:Worker|SharedWorker|URL)\\s*\\(\\s*' + asset, 'gi'),
+        new RegExp("(?:\\.\\s*(?:src|href)|\\[\\s*['\"](?:src|href)['\"]\\s*\\])\\s*=\\s*" + asset, 'gi'),
+        new RegExp("\\.setAttribute\\s*\\(\\s*['\"](?:src|href)['\"]\\s*,\\s*" + asset, 'gi'),
+        new RegExp('\\b[A-Za-z_$][\\w$]*(?:Url|URL|Path|Src|Href|Worker)\\s*=\\s*' + asset, 'gi'),
+        new RegExp('\\b(?:swUrl|workerUrl|scriptUrl|serviceWorkerUrl|sourceUrl)\\s*:\\s*' + asset, 'gi'),
+        new RegExp("\\b(?:e|_export)\\s*\\(\\s*['\"]default['\"]\\s*,\\s*" + asset, 'gi'),
+    ];
 }
 
 function createReferenceReplacementMap(relative, renameMap) {
@@ -464,7 +554,8 @@ function auditTree(tree, managed, renameHistory, bundlePairs, algorithm, hashLen
     tree.forEach((buffer, relative) => {
         if (relative === MANIFEST_FILE || !isTextFile(relative)) return;
         const source = stripHtmlComments(buffer.toString('utf8'), relative);
-        extractLocalReferences(source, relative).forEach((reference) => {
+        const localReferences = extractLocalReferences(source, relative);
+        localReferences.forEach((reference) => {
             const target = resolveReference(relative, reference, tree);
             if (!target) return;
             references.push({ from: relative, reference, target });
@@ -472,9 +563,11 @@ function auditTree(tree, managed, renameHistory, bundlePairs, algorithm, hashLen
                 missingReferences.push(`${relative} -> ${reference}`);
             }
         });
-        historyMap.forEach((to, from) => {
-            if (source.indexOf(from) >= 0 || source.indexOf(`./${from}`) >= 0) {
-                staleReferences.push(`${relative} still references ${from}; expected ${to}`);
+        const staleReferenceMap = createReferenceReplacementMap(relative, historyMap);
+        localReferences.forEach((reference) => {
+            const expected = replaceReferenceValue(reference, staleReferenceMap);
+            if (expected !== reference) {
+                staleReferences.push(`${relative} still references ${reference}; expected ${expected}`);
             }
         });
     });
@@ -811,9 +904,13 @@ function remapSet(set, renameMap) {
     next.forEach((relative) => set.add(relative));
 }
 
+function isMarkupFile(extension) {
+    return extension === '.html' || extension === '.ejs' || extension === '.xml';
+}
+
 function extractLocalReferences(source, relative) {
     const extension = path.posix.extname(relative).toLowerCase();
-    if (extension === '.json') {
+    if (extension === '.json' || extension === '.webmanifest') {
         return extractJsonReferences(source, relative);
     }
     if (extension === '.css') {
@@ -845,11 +942,16 @@ function extractLocalReferences(source, relative) {
         collectQuotedReferences(registerMatch[1], newAssetPattern(), output);
     }
 
-    if (extension === '.html') {
+    if (isMarkupFile(extension)) {
         const htmlPattern = /<(?:script|link)\b[^>]*?\b(?:src|href)\s*=\s*(['"])([^'"]+)\1/gi;
         let htmlMatch;
         while ((htmlMatch = htmlPattern.exec(source))) {
             output.push(htmlMatch[2]);
+        }
+        const stylePattern = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi;
+        let styleMatch;
+        while ((styleMatch = stylePattern.exec(source))) {
+            output.push(...extractCssReferences(styleMatch[1]));
         }
     }
 
